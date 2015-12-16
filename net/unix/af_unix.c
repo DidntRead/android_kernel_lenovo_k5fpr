@@ -1996,14 +1996,7 @@ static int unix_stream_recvmsg(struct kiocb *iocb, struct socket *sock,
 		memset(&tmp_scm, 0, sizeof(tmp_scm));
 	}
 
-	err = mutex_lock_interruptible(&u->readlock);
-	if (unlikely(err)) {
-		/* recvmsg() in non blocking mode is supposed to return -EAGAIN
-		 * sk_rcvtimeo is not honored by mutex_lock_interruptible()
-		 */
-		err = noblock ? -EAGAIN : -ERESTARTSYS;
-		goto out;
-	}
+	mutex_lock(&u->readlock);
 
 	if (flags & MSG_PEEK)
 		skip = sk_peek_offset(sk, flags);
@@ -2065,34 +2058,13 @@ again:
 			mutex_unlock(&u->readlock);
 
 			timeo = unix_stream_data_wait(sk, timeo, last);
-			if (!timeo) {
-				if (sk && sk->sk_socket) {
-					if (other && other->sk_socket) {
-#ifdef CONFIG_MTK_NET_LOGGING
-						unsigned long other_ino = SOCK_INODE(other->sk_socket)->i_ino;
-						unsigned long sk_ino = SOCK_INODE(sk->sk_socket)->i_ino;
 
-			pr_debug("[mtk_net][unix]: recvmsg[%lu:%lu]:exit read due to timeout\n", sk_ino, other_ino);
-#endif
-					} else {
-#ifdef CONFIG_MTK_NET_LOGGING
-			unsigned long sk_ino = SOCK_INODE(sk->sk_socket)->i_ino;
-
-			pr_debug("[mtk_net][unix]: recvmsg[%lu:null]:exit read due to timeout\n", sk__ino);
-#endif
-					}
-				} else {
-#ifdef CONFIG_MTK_NET_LOGGING
-					pr_debug("[mtk_net][unix]: recvmsg:exit read due to timeout\n");
-#endif
-				}
-			}
-			if (signal_pending(current)
-			    ||  mutex_lock_interruptible(&u->readlock)) {
+			if (signal_pending(current)) {
 				err = sock_intr_errno(timeo);
 				goto out;
 			}
 
+			mutex_lock(&u->readlock);
 			continue;
  unlock:
 			unix_state_unlock(sk);
