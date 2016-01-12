@@ -270,6 +270,7 @@ static void option_instat_callback(struct urb *urb);
 #define TELIT_PRODUCT_CC864_SINGLE		0x1006
 #define TELIT_PRODUCT_DE910_DUAL		0x1010
 #define TELIT_PRODUCT_UE910_V2			0x1012
+<<<<<<< HEAD
 #define TELIT_PRODUCT_LE922_USBCFG1		0x1040
 #define TELIT_PRODUCT_LE922_USBCFG2		0x1041
 #define TELIT_PRODUCT_LE922_USBCFG0		0x1042
@@ -277,6 +278,10 @@ static void option_instat_callback(struct urb *urb);
 #define TELIT_PRODUCT_LE922_USBCFG5		0x1045
 #define TELIT_PRODUCT_ME910			0x1100
 #define TELIT_PRODUCT_ME910_DUAL_MODEM		0x1101
+=======
+#define TELIT_PRODUCT_LE922_USBCFG0		0x1042
+#define TELIT_PRODUCT_LE922_USBCFG3		0x1043
+>>>>>>> a1156a1d64ca... USB: serial: option: Adding support for Telit LE922
 #define TELIT_PRODUCT_LE920			0x1200
 #define TELIT_PRODUCT_LE910			0x1201
 #define TELIT_PRODUCT_LE910_USBCFG4		0x1206
@@ -665,11 +670,14 @@ static const struct option_blacklist_info sierra_mc73xx_blacklist = {
 	.reserved = BIT(8) | BIT(10) | BIT(11),
 };
 
+<<<<<<< HEAD
 static const struct option_blacklist_info telit_le920a4_blacklist_1 = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(1),
 };
 
+=======
+>>>>>>> a1156a1d64ca... USB: serial: option: Adding support for Telit LE922
 static const struct option_blacklist_info telit_le922_blacklist_usbcfg0 = {
 	.sendsetup = BIT(2),
 	.reserved = BIT(0) | BIT(1) | BIT(3),
@@ -680,10 +688,13 @@ static const struct option_blacklist_info telit_le922_blacklist_usbcfg3 = {
 	.reserved = BIT(1) | BIT(2) | BIT(3),
 };
 
+<<<<<<< HEAD
 static const struct option_blacklist_info cinterion_rmnet2_blacklist = {
 	.reserved = BIT(4) | BIT(5),
 };
 
+=======
+>>>>>>> a1156a1d64ca... USB: serial: option: Adding support for Telit LE922
 static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_COLT) },
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_RICOLA) },
