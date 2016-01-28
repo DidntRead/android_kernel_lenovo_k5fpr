@@ -270,7 +270,6 @@ static void option_instat_callback(struct urb *urb);
 #define TELIT_PRODUCT_CC864_SINGLE		0x1006
 #define TELIT_PRODUCT_DE910_DUAL		0x1010
 #define TELIT_PRODUCT_UE910_V2			0x1012
-<<<<<<< HEAD
 #define TELIT_PRODUCT_LE922_USBCFG1		0x1040
 #define TELIT_PRODUCT_LE922_USBCFG2		0x1041
 #define TELIT_PRODUCT_LE922_USBCFG0		0x1042
@@ -278,10 +277,6 @@ static void option_instat_callback(struct urb *urb);
 #define TELIT_PRODUCT_LE922_USBCFG5		0x1045
 #define TELIT_PRODUCT_ME910			0x1100
 #define TELIT_PRODUCT_ME910_DUAL_MODEM		0x1101
-=======
-#define TELIT_PRODUCT_LE922_USBCFG0		0x1042
-#define TELIT_PRODUCT_LE922_USBCFG3		0x1043
->>>>>>> a1156a1d64ca... USB: serial: option: Adding support for Telit LE922
 #define TELIT_PRODUCT_LE920			0x1200
 #define TELIT_PRODUCT_LE910			0x1201
 #define TELIT_PRODUCT_LE910_USBCFG4		0x1206
@@ -645,6 +640,7 @@ static const struct option_blacklist_info simcom_sim7100e_blacklist = {
 	.reserved = BIT(5) | BIT(6),
 };
 
+<<<<<<< HEAD
 static const struct option_blacklist_info telit_me910_blacklist = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(1) | BIT(3),
@@ -655,6 +651,8 @@ static const struct option_blacklist_info telit_me910_dual_modem_blacklist = {
 	.reserved = BIT(3),
 };
 
+=======
+>>>>>>> 6034ffbdd523... USB: option: add support for SIM7100E
 static const struct option_blacklist_info telit_le910_blacklist = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(1) | BIT(2),
