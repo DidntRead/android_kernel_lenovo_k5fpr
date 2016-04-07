@@ -651,8 +651,6 @@ static const struct option_blacklist_info telit_me910_dual_modem_blacklist = {
 	.reserved = BIT(3),
 };
 
-=======
->>>>>>> 6034ffbdd523... USB: option: add support for SIM7100E
 static const struct option_blacklist_info telit_le910_blacklist = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(1) | BIT(2),
@@ -668,14 +666,11 @@ static const struct option_blacklist_info sierra_mc73xx_blacklist = {
 	.reserved = BIT(8) | BIT(10) | BIT(11),
 };
 
-<<<<<<< HEAD
 static const struct option_blacklist_info telit_le920a4_blacklist_1 = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(1),
 };
 
-=======
->>>>>>> a1156a1d64ca... USB: serial: option: Adding support for Telit LE922
 static const struct option_blacklist_info telit_le922_blacklist_usbcfg0 = {
 	.sendsetup = BIT(2),
 	.reserved = BIT(0) | BIT(1) | BIT(3),
@@ -686,13 +681,10 @@ static const struct option_blacklist_info telit_le922_blacklist_usbcfg3 = {
 	.reserved = BIT(1) | BIT(2) | BIT(3),
 };
 
-<<<<<<< HEAD
 static const struct option_blacklist_info cinterion_rmnet2_blacklist = {
 	.reserved = BIT(4) | BIT(5),
 };
 
-=======
->>>>>>> a1156a1d64ca... USB: serial: option: Adding support for Telit LE922
 static const struct usb_device_id option_ids[] = {
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_COLT) },
 	{ USB_DEVICE(OPTION_VENDOR_ID, OPTION_PRODUCT_RICOLA) },
@@ -1255,13 +1247,10 @@ static const struct usb_device_id option_ids[] = {
 		.driver_info = (kernel_ulong_t)&telit_le922_blacklist_usbcfg3 },
 	{ USB_DEVICE_INTERFACE_CLASS(TELIT_VENDOR_ID, TELIT_PRODUCT_LE922_USBCFG5, 0xff),
 		.driver_info = (kernel_ulong_t)&telit_le922_blacklist_usbcfg0 },
-<<<<<<< HEAD
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_ME910),
 		.driver_info = (kernel_ulong_t)&telit_me910_blacklist },
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_ME910_DUAL_MODEM),
 		.driver_info = (kernel_ulong_t)&telit_me910_dual_modem_blacklist },
-=======
->>>>>>> f5ef0a673b06... USB: serial: option: add support for Telit LE922 PID 0x1045
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_LE910),
 		.driver_info = (kernel_ulong_t)&telit_le910_blacklist },
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_LE910_USBCFG4),
