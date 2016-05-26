@@ -1575,12 +1575,18 @@ delegate:
 				if (value < 0)
 					break;
 
+<<<<<<< HEAD
 				++dev->udc_usage;
+=======
+>>>>>>> 685ed1a60987... usb: gadget: fix spinlock dead lock in gadgetfs
 				spin_unlock (&dev->lock);
 				value = usb_ep_queue (gadget->ep0, dev->req,
 							GFP_KERNEL);
 				spin_lock (&dev->lock);
+<<<<<<< HEAD
 				--dev->udc_usage;
+=======
+>>>>>>> 685ed1a60987... usb: gadget: fix spinlock dead lock in gadgetfs
 				if (value < 0) {
 					clean_req (gadget->ep0, dev->req);
 					break;
@@ -1604,12 +1610,17 @@ delegate:
 		req->length = value;
 		req->zero = value < w_length;
 
+<<<<<<< HEAD
 		++dev->udc_usage;
 		spin_unlock (&dev->lock);
 		value = usb_ep_queue (gadget->ep0, req, GFP_KERNEL);
 		spin_lock(&dev->lock);
 		--dev->udc_usage;
 		spin_unlock(&dev->lock);
+=======
+		spin_unlock (&dev->lock);
+		value = usb_ep_queue (gadget->ep0, req, GFP_KERNEL);
+>>>>>>> 685ed1a60987... usb: gadget: fix spinlock dead lock in gadgetfs
 		if (value < 0) {
 			DBG (dev, "ep_queue --> %d\n", value);
 			req->status = 0;
