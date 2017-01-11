@@ -866,6 +866,7 @@ void xhci_stop_endpoint_command_watchdog(unsigned long arg)
 		spin_unlock_irqrestore(&xhci->lock, flags);
 		return;
 	}
+
 	if (!(ep->stop_cmds_pending == 0 && (ep->ep_state & EP_HALT_PENDING))) {
 		xhci_dbg_trace(xhci, trace_xhci_dbg_cancel_urb,
 				"Stop EP timer ran, but no command pending, "
