@@ -515,25 +515,9 @@ static struct ion_handle *ion_handle_get_by_id_nolock(struct ion_client *client,
 
 	handle = idr_find(&client->idr, id);
 	if (handle)
-<<<<<<< HEAD
 		return ion_handle_get_check_overflow(handle);
 
 	return ERR_PTR(-EINVAL);
-}
-
-struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
-						int id)
-{
-	struct ion_handle *handle;
-
-	mutex_lock(&client->lock);
-	handle = ion_handle_get_by_id_nolock(client, id);
-	mutex_unlock(&client->lock);
-=======
-		ion_handle_get(handle);
->>>>>>> f63514257efd... staging/android/ion : fix a race condition in the ion driver
-
-	return handle;
 }
 
 struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
@@ -703,7 +687,6 @@ static void ion_free_nolock(struct ion_client *client, struct ion_handle *handle
 	ion_handle_put_nolock(handle);
 }
 
-<<<<<<< HEAD
 /* Must hold the client lock */
 static void user_ion_free_nolock(struct ion_client *client, struct ion_handle *handle)
 {
@@ -721,8 +704,6 @@ static void user_ion_free_nolock(struct ion_client *client, struct ion_handle *h
 	user_ion_handle_put_nolock(handle);
 }
 
-=======
->>>>>>> f63514257efd... staging/android/ion : fix a race condition in the ion driver
 void ion_free(struct ion_client *client, struct ion_handle *handle)
 {
 	BUG_ON(client != handle->client);
@@ -1566,16 +1547,10 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		handle = ion_handle_get_by_id_nolock(client, data.handle.handle);
 		if (IS_ERR(handle)) {
 			mutex_unlock(&client->lock);
-<<<<<<< HEAD
 			IONMSG("ION_IOC_FREE handle is invalid. handle = %d, ret = %d.\n", data.handle.handle, ret);
 			return PTR_ERR(handle);
 		}
 		user_ion_free_nolock(client, handle);
-=======
-			return PTR_ERR(handle);
-		}
-		ion_free_nolock(client, handle);
->>>>>>> f63514257efd... staging/android/ion : fix a race condition in the ion driver
 		ion_handle_put_nolock(handle);
 		mutex_unlock(&client->lock);
 		break;
