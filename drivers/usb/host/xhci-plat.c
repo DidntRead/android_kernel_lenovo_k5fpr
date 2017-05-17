@@ -131,7 +131,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 #ifdef CONFIG_USB_XHCI_MTK  /* device tree support */
 	irq = platform_get_irq_byname(pdev, XHCI_DRIVER_NAME);
 	if (irq < 0)
-		return -ENODEV;
+		return irq;
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, XHCI_BASE_REGS_ADDR_RES_NAME);
 	if (!res)
