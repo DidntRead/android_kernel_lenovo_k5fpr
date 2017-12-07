@@ -345,9 +345,12 @@ static int get_pipe(struct stub_device *sdev, struct usbip_header *pdu)
 	struct usb_endpoint_descriptor *epd = NULL;
 	int epnum = pdu->base.ep;
 	int dir = pdu->base.direction;
+<<<<<<< HEAD
 
 	if (epnum < 0 || epnum > 15)
 		goto err_ret;
+=======
+>>>>>>> eebf31529012... usbip: fix stub_rx: harden CMD_SUBMIT path to handle malicious input
 
 	if (epnum < 0 || epnum > 15)
 		goto err_ret;
@@ -412,7 +415,7 @@ static int get_pipe(struct stub_device *sdev, struct usbip_header *pdu)
 
 err_ret:
 	/* NOT REACHED */
-	dev_err(&sdev->interface->dev, "get pipe, epnum %d\n", epnum);
+	dev_err(&sdev->udev->dev, "CMD_SUBMIT: invalid epnum %d\n", epnum);
 	return -1;
 }
 
@@ -478,9 +481,6 @@ static void stub_recv_cmd_submit(struct stub_device *sdev,
 	struct usbip_device *ud = &sdev->ud;
 	struct usb_device *udev = sdev->udev;
 	int pipe = get_pipe(sdev, pdu);
-
-	if (pipe == -1)
-		return;
 
 	if (pipe == -1)
 		return;
