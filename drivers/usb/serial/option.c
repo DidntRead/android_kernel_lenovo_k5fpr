@@ -640,23 +640,16 @@ static const struct option_blacklist_info simcom_sim7100e_blacklist = {
 	.reserved = BIT(5) | BIT(6),
 };
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> ae0ff95b2333... usb: serial: option: add Telit ME910 support
 static const struct option_blacklist_info telit_me910_blacklist = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(1) | BIT(3),
 };
 
-<<<<<<< HEAD
 static const struct option_blacklist_info telit_me910_dual_modem_blacklist = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(3),
 };
 
-=======
->>>>>>> ae0ff95b2333... usb: serial: option: add Telit ME910 support
 static const struct option_blacklist_info telit_le910_blacklist = {
 	.sendsetup = BIT(0),
 	.reserved = BIT(1) | BIT(2),
@@ -1255,11 +1248,8 @@ static const struct usb_device_id option_ids[] = {
 		.driver_info = (kernel_ulong_t)&telit_le922_blacklist_usbcfg0 },
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_ME910),
 		.driver_info = (kernel_ulong_t)&telit_me910_blacklist },
-<<<<<<< HEAD
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_ME910_DUAL_MODEM),
 		.driver_info = (kernel_ulong_t)&telit_me910_dual_modem_blacklist },
-=======
->>>>>>> ae0ff95b2333... usb: serial: option: add Telit ME910 support
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_LE910),
 		.driver_info = (kernel_ulong_t)&telit_le910_blacklist },
 	{ USB_DEVICE(TELIT_VENDOR_ID, TELIT_PRODUCT_LE910_USBCFG4),
