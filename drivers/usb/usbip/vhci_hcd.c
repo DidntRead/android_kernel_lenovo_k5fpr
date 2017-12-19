@@ -469,9 +469,6 @@ static int vhci_urb_enqueue(struct usb_hcd *hcd, struct urb *urb,
 	struct vhci_device *vdev;
 	unsigned long flags;
 
-	usbip_dbg_vhci_hc("enter, usb_hcd %p urb %p mem_flags %d\n",
-			  hcd, urb, mem_flags);
-
 	/* patch to usb_sg_init() is in 2.5.60 */
 	BUG_ON(!urb->transfer_buffer && urb->transfer_buffer_length);
 
@@ -630,11 +627,8 @@ static int vhci_urb_dequeue(struct usb_hcd *hcd, struct urb *urb, int status)
 	struct vhci_device *vdev;
 	unsigned long flags;
 
-<<<<<<< HEAD
-=======
 	pr_info("dequeue a urb %p\n", urb);
 
->>>>>>> 9ea2031f4d16... usb: usbip: Fix possible deadlocks reported by lockdep
 	spin_lock_irqsave(&the_controller->lock, flags);
 
 	priv = urb->hcpriv;
