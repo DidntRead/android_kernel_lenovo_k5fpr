@@ -139,27 +139,17 @@ static int ion_fb_heap_allocate(struct ion_heap *heap,
 	return pBufferInfo->priv_phys == ION_CARVEOUT_ALLOCATE_FAIL ? -ENOMEM : 0;
 }
 
-void ion_fb_heap_free_bufferInfo(struct ion_buffer *buffer)
-{
-	struct sg_table *table = buffer->sg_table;
-	ion_fb_buffer_info *pBufferInfo = (ion_fb_buffer_info *)buffer->priv_virt;
-
-	if (pBufferInfo) {
-		mutex_lock(&(pBufferInfo->lock));
-
-		if ((pBufferInfo->eModuleID != -1) && (pBufferInfo->MVA))
-			m4u_dealloc_mva_sg(pBufferInfo->eModuleID, table, buffer->size, pBufferInfo->MVA);
-
-		mutex_unlock(&(pBufferInfo->lock));
-	}
-}
-
 static void ion_fb_heap_free(struct ion_buffer *buffer)
 {
 	struct ion_heap *heap = buffer->heap;
 	ion_fb_buffer_info *pBufferInfo = (ion_fb_buffer_info *) buffer->priv_virt;
+	struct sg_table *table = buffer->sg_table;
 
-	buffer->priv_virt = NULL;
+	if (!pBufferInfo)
+		return;
+
+	if (pBufferInfo->MVA)
+		m4u_dealloc_mva_sg(pBufferInfo->eModuleID, table, buffer->size, pBufferInfo->MVA);
 	ion_fb_free(heap, pBufferInfo->priv_phys, buffer->size);
 
 	pBufferInfo->priv_phys = ION_CARVEOUT_ALLOCATE_FAIL;
@@ -198,7 +188,6 @@ static struct ion_heap_ops fb_heap_ops = {
 		.map_user = ion_heap_map_user,
 		.map_kernel = ion_heap_map_kernel,
 		.unmap_kernel = ion_heap_unmap_kernel,
-		.add_freelist = ion_fb_heap_free_bufferInfo,
 };
 
 #define ION_PRINT_LOG_OR_SEQ(seq_file, fmt, args...) \
@@ -284,6 +273,8 @@ int ion_drv_create_FB_heap(ion_phys_addr_t fb_base, size_t fb_size)
 	struct ion_platform_heap *heap_data;
 
 	heap_data = kzalloc(sizeof(struct ion_platform_heap), GFP_KERNEL);
+	if (!heap_data)
+		return -ENOMEM;
 
 	heap_data->id = ION_HEAP_TYPE_FB;
 	heap_data->type = ION_HEAP_TYPE_FB;
@@ -293,6 +284,8 @@ int ion_drv_create_FB_heap(ion_phys_addr_t fb_base, size_t fb_size)
 	heap_data->align = 0x1000;
 	heap_data->priv = NULL;
 	ion_drv_create_heap(heap_data);
+
+	kfree(heap_data);
 
 	return 0;
 }

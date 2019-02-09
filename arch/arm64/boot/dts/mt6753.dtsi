@@ -2034,6 +2034,13 @@ initrd=0x44000000,0x300000 loglevel=8 androidboot.hardware=mt6735";
 					mnt_flags = "ro,noatime";
 					fsmgr_flags = "wait";
 				};
+				vendor {
+					compatible = "android,vendor";
+					dev = "/dev/block/platform/mtk-msdc.0/11230000.msdc0/by-name/preload";
+					type = "ext4";
+					mnt_flags = "ro,noatime";
+					fsmgr_flags = "wait";
+				};
 			};
 		};
 	};

@@ -624,6 +624,7 @@ typedef struct {
 	unsigned int height;
 	unsigned int virtual_width;
 	unsigned int virtual_height;
+	unsigned int density;
 	unsigned int io_select_mode;	/* DBI or DPI should select IO mode according to chip spec */
 
 	/* particular parameters */
@@ -632,6 +633,8 @@ typedef struct {
 	LCM_DSI_PARAMS dsi;
 	unsigned int physical_width;
 	unsigned int physical_height;
+	unsigned int physical_width_um;
+	unsigned int physical_height_um;
 	unsigned int od_table_size;
 	void *od_table;
 } LCM_PARAMS;

@@ -88,10 +88,8 @@ struct ion_client {
 };
 
 struct ion_handle_debug {
-	pid_t pid;
-	pid_t tgid;
-	unsigned int backtrace[BACKTRACE_SIZE];
-	unsigned int backtrace_num;
+	int fd;
+	unsigned long long user_ts; /* alloc or import timestamp */
 };
 
 /**
@@ -108,14 +106,13 @@ struct ion_handle_debug {
  */
 struct ion_handle {
 	struct kref ref;
+	unsigned int user_ref_count;
 	struct ion_client *client;
 	struct ion_buffer *buffer;
 	struct rb_node node;
 	unsigned int kmap_cnt;
 	int id;
-#if ION_RUNTIME_DEBUGGER
-	struct ion_handle_debug dbg; /* add by K for debug */
-#endif
+	struct ion_handle_debug dbg; /*add by K for debug */
 };
 
 
@@ -172,6 +169,7 @@ struct ion_buffer {
 	int handle_count;
 	char task_comm[TASK_COMM_LEN];
 	pid_t pid;
+	char alloc_dbg[ION_MM_DBG_NAME_LEN];
 };
 void ion_buffer_destroy(struct ion_buffer *buffer);
 
@@ -209,8 +207,6 @@ struct ion_heap_ops {
 	int (*map_user)(struct ion_heap *mapper, struct ion_buffer *buffer,
 			struct vm_area_struct *vma);
 	int (*shrink)(struct ion_heap *heap, gfp_t gfp_mask, int nr_to_scan);
-	void (*add_freelist)(struct ion_buffer *buffer);
-	int (*page_pool_total)(struct ion_heap *heap);
 };
 
 /**
@@ -415,14 +411,9 @@ void ion_carveout_heap_destroy(struct ion_heap *);
 struct ion_heap *ion_chunk_heap_create(struct ion_platform_heap *);
 void ion_chunk_heap_destroy(struct ion_heap *);
 
-struct ion_heap *ion_mm_heap_create(struct ion_platform_heap *);
-void ion_mm_heap_destroy(struct ion_heap *);
-
 struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *);
 void ion_cma_heap_destroy(struct ion_heap *);
 
-struct ion_heap *ion_fb_heap_create(struct ion_platform_heap *);
-void ion_fb_heap_destroy(struct ion_heap *);
 /**
  * kernel api to allocate/free from carveout -- used when carveout is
  * used to back an architecture specific custom heap
@@ -431,8 +422,6 @@ ion_phys_addr_t ion_carveout_allocate(struct ion_heap *heap, unsigned long size,
 				      unsigned long align);
 void ion_carveout_free(struct ion_heap *heap, ion_phys_addr_t addr,
 		       unsigned long size);
-
-int ion_device_destroy_heaps(struct ion_device *dev, int need_lock);
 /**
  * The carveout heap returns physical addresses, since 0 may be a valid
  * physical address, this is used to indicate allocation failed
