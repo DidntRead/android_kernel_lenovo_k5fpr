@@ -1692,10 +1692,23 @@ initrd=0x44000000,0x300000 loglevel=8 androidboot.hardware=mt6735";
 		/* NFC start */
 		nfc:nfc@0 {
 			compatible = "mediatek,nfc-gpio-v2";
-			gpio-ven = <17>;
-			gpio-rst = <143>;
-			gpio-eint = <145>;
-			gpio-irq = <144>;
+			gpio-ven = <0x11>;
+			gpio-rst = <0x8f>;
+			gpio-eint = <0x91>;
+			gpio-irq = <0x90>;
+			interrupt-parent = <0xb>;
+			interrupts = <0x90 0x4>;
+			debounce = <0x90 0x0>;
+			status = "okay";
+			pinctrl-names = "default", "ven_high", "ven_low", "rst_high", "rst_low", "eint_high", "eint_low", "irq_init";
+			pinctrl-0 = <0x2e>;
+			pinctrl-1 = <0x58>;
+			pinctrl-2 = <0x59>;
+			pinctrl-3 = <0x5a>;
+			pinctrl-4 = <0x5b>;
+			pinctrl-5 = <0x5c>;
+			pinctrl-6 = <0x5d>;
+			pinctrl-7 = <0x5e>;
 		};
 		/* NFC end */
 		btcvsd@10000000 {

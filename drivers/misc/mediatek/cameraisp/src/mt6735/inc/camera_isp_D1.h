@@ -1,3 +1,16 @@
+/*
+ * Copyright (C) 2015 MediaTek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 #ifndef _MT_ISP_H
 #define _MT_ISP_H
 
@@ -627,7 +640,6 @@ typedef enum {
 /*  */
 typedef struct {
 	ISP_RTBC_STATE_ENUM state;
-	unsigned long dropCnt;
 	ISP_RT_RING_BUF_INFO_STRUCT ring_buf[_rt_dma_max_];
 } ISP_RT_BUF_STRUCT;
 /*  */
