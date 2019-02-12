@@ -1,3 +1,16 @@
+/*
+ * Copyright (C) 2015 MediaTek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 #ifndef __MUSB_MTK_MUSB_H__
 #define __MUSB_MTK_MUSB_H__
 
@@ -54,6 +67,7 @@ typedef enum {
 } usb_state_enum;
 
 /* USB phy and clock */
+extern bool usb_pre_clock(bool enable);
 extern void usb_phy_poweron(void);
 extern void usb_phy_recover(void);
 extern void usb_phy_savecurrent(void);

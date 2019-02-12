@@ -4,4 +4,4 @@ export CROSS_COMPILE="/home/didntread/Desktop/lineage/prebuilts/gcc/linux-x86/aa
 
 mkdir out
 
-make ARCH=arm64 O=out k5fpr_defconfig;make ARCH=arm64 -j2 O=out ;
+make ARCH=arm64 O=out k5fpr_defconfig;make CC="ccache /home/didntread/Desktop/lineage/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-gcc" ARCH=arm64 -j2 O=out ;
