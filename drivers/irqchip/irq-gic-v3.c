@@ -461,7 +461,7 @@ static void gic_cpu_init(void)
 	if (gic_populate_rdist())
 		return;
 
-	gic_enable_redist();
+	gic_enable_redist(true);
 
 	rbase = gic_data_rdist_sgi_base();
 
