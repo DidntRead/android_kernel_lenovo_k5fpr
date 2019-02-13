@@ -561,43 +561,9 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 	} else if (is_swap_pte(*pte)) {
 		swp_entry_t swpent = pte_to_swp_entry(*pte);
 
-<<<<<<< HEAD
-		/* M for pswap interface */
-		if (!non_swap_entry(swpent)) {
-#ifdef CONFIG_SWAP
-			swp_entry_t entry;
-			struct swap_info_struct *p;
-#endif /* CONFIG_SWAP*/
-			mss->swap += ptent_size;
-#ifdef CONFIG_SWAP
-			entry = pte_to_swp_entry(ptent);
-			if (non_swap_entry(entry))
-				return;
-			p = swap_info_get(entry);
-			if (p) {
-				int swapcount = swap_count(p->swap_map[swp_offset(entry)]);
-
-				if (swapcount == 0)
-					swapcount = 1;
-
-#ifdef CONFIG_ZNDSWAP
-				/* It indicates 2ndswap ONLY */
-				if (swp_type(entry) == 1UL)
-					mss->pswap_zndswap += (ptent_size << PSS_SHIFT) / swapcount;
-				else
-					mss->pswap += (ptent_size << PSS_SHIFT) / swapcount;
-#else
-				mss->pswap += (ptent_size << PSS_SHIFT) / swapcount;
-#endif
-				swap_info_unlock(p);
-			}
-#endif /* CONFIG_SWAP*/
-		} else if (is_migration_entry(swpent))
-=======
 		if (!non_swap_entry(swpent))
 			mss->swap += PAGE_SIZE;
 		else if (is_migration_entry(swpent))
->>>>>>> 20b97db882d7... mm: fix huge zero page accounting in smaps report
 			page = migration_entry_to_page(swpent);
 	} else if (pte_file(*pte)) {
 		if (pte_to_pgoff(*pte) != pgoff)
