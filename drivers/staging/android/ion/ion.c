@@ -1380,15 +1380,13 @@ static int __ion_share_dma_buf_fd(struct ion_client *client,
 	dmabuf = __ion_share_dma_buf(client, handle, lock_client);
 	if (IS_ERR(dmabuf))
 		return PTR_ERR(dmabuf);
-	}
 
 	fd = dma_buf_fd(dmabuf, O_CLOEXEC);
-	if (fd < 0) {
-		IONMSG("%s dma_buf_fd failed %d.\n", __func__, fd);
+	if (fd < 0)
 		dma_buf_put(dmabuf);
-	}
 
 	return fd;
+
 }
 
 int ion_share_dma_buf_fd(struct ion_client *client, struct ion_handle *handle)
@@ -1571,18 +1569,6 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	{
 		struct ion_handle *handle;
 
-<<<<<<< HEAD
-		handle = ion_handle_get_by_id(client, data.handle.handle);
-		if (IS_ERR(handle)) {
-			ret = PTR_ERR(handle);
-			IONMSG("ION_IOC_SHARE handle is invalid. handle = %d, ret = %d.\n", data.handle.handle, ret);
-			return ret;
-		}
-		data.fd.fd = ion_share_dma_buf_fd(client, handle);
-		ion_handle_put(handle);
-		if (data.fd.fd < 0) {
-			IONMSG("ION_IOC_SHARE fd = %d.\n", data.fd.fd);
-=======
 		mutex_lock(&client->lock);
 		handle = ion_handle_get_by_id_nolock(client, data.handle.handle);
 		if (IS_ERR(handle)) {
@@ -1593,9 +1579,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ion_handle_put_nolock(handle);
 		mutex_unlock(&client->lock);
 		if (data.fd.fd < 0)
->>>>>>> d82ad70e8aff... staging: android: ion: fix ION_IOC_{MAP,SHARE} use-after-free
 			ret = data.fd.fd;
-		}
 		break;
 	}
 	case ION_IOC_IMPORT:
@@ -2006,7 +1990,7 @@ struct ion_handle *ion_drv_get_handle(struct ion_client *client, int user_handle
 		ion_handle_get(handle);
 		mutex_unlock(&client->lock);
 	} else {
-		handle = ion_handle_get_by_id(client, user_handle);
+		handle = ion_handle_get_by_id_nolock(client, user_handle);
 		if (!handle) {
 			IONMSG("%s handle invalid, handle_id=%d\n", __func__, user_handle);
 			return ERR_PTR(-EINVAL);
