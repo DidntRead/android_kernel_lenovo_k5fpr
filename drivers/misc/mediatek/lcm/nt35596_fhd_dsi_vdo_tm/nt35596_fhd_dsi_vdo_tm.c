@@ -372,12 +372,10 @@ static struct LCM_setting_table lcm_backlight_level_setting[] = {
 /*
  *lenovo wuwl10 20150604 add CUSTOM_LCM_FEATURE begin
  */
-#ifdef CONFIG_LENOVO_CUSTOM_LCM_FEATURE
 static struct LCM_setting_table lcm_cabc_level_setting[] = {
 	{0x55, 1, {0x00}},
 	{REGFLAG_END_OF_TABLE, 0x00, {}}
 };
-#endif
 #if 0
 static struct LCM_setting_table lcm_inverse_off_setting[] = {
 	{0x20, 1, {0x00}},
@@ -852,7 +850,6 @@ static unsigned int lcm_compare_id(void)
 /*
  *lenovo wuwl10 20150604 add CUSTOM_LCM_FEATURE begin
  */
-#ifdef CONFIG_LENOVO_CUSTOM_LCM_FEATURE
 static void lcm_set_cabcmode(unsigned int mode)
 {
 #ifdef BUILD_LK
@@ -864,7 +861,6 @@ static void lcm_set_cabcmode(unsigned int mode)
 	lcm_cabc_level_setting[0].para_list[0] = mode;
 	push_table(lcm_cabc_level_setting, sizeof(lcm_cabc_level_setting) / sizeof(struct LCM_setting_table), 1);
 }
-#endif
 /*
  *lenovo wuwl10 20150604 add CUSTOM_LCM_FEATURE end
  */
@@ -889,9 +885,7 @@ LCM_DRIVER nt35596_fhd_dsi_vdo_tm_lcm_drv = {
 	 *.suspend_power = lcm_suspend_power,
 	 */
 	.set_backlight	= lcm_setbacklight,
-#ifdef CONFIG_LENOVO_CUSTOM_LCM_FEATURE
 	.set_cabcmode = lcm_set_cabcmode,
-#endif
 #if (LCM_DSI_CMD_MODE)
 	.update = lcm_update,
 #endif

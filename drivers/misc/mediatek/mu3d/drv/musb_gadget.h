@@ -37,7 +37,7 @@
 
 #include <linux/list.h>
 
-extern u32 is_prof;
+extern int is_prof;
 extern unsigned int ep_prof[8][2];
 extern void wake_up_bat(void);
 
@@ -130,6 +130,6 @@ extern struct musb_fifo_cfg ep0_cfg_u3;
 extern struct musb_fifo_cfg ep0_cfg_u2;
 extern void ep0_setup(struct musb *musb, struct musb_hw_ep *hw_ep0,
 		      const struct musb_fifo_cfg *cfg);
-
+extern bool is_usb_rdy(void);
 
 #endif				/* __MUSB_GADGET_H */

@@ -106,7 +106,6 @@
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 #include <linux/seq_file.h>
-#include <mach/system.h>
 #endif
 
 #include <mt-plat/mt_chip.h>
@@ -120,7 +119,7 @@
 #include <linux/of.h>
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
-#define AP_UART0_COMPATIBLE_NAME "mediatek,AP_UART0"
+#define AP_UART0_COMPATIBLE_NAME "mediatek,gpio"
 #endif
 
 #define TA_WAIT_BCON(m) max_t(int, (m)->a_wait_bcon, OTG_TIME_A_WAIT_BCON)
@@ -137,17 +136,18 @@ const char musb_driver_name[] = MUSB_DRIVER_NAME;
 
 struct musb *_mu3d_musb = NULL;
 
-u32 debug_level = K_ALET | K_CRIT | K_ERR | K_WARNIN | K_NOTICE | K_INFO;
-u32 fake_CDP = 0;
 
-module_param(debug_level, int, 0644);
+int debug_level = K_ALET | K_CRIT | K_ERR | K_WARNIN /* | K_NOTICE | K_INFO */;
+int fake_CDP = 0;
+
+module_param(debug_level, int, 0400);
 MODULE_PARM_DESC(debug_level, "Debug Print Log Lvl");
-module_param(fake_CDP, int, 0644);
+module_param(fake_CDP, int, 0400);
 
 #ifdef EP_PROFILING
-u32 is_prof = 1;
+int is_prof = 1;
 
-module_param(is_prof, int, 0644);
+module_param(is_prof, int, 0400);
 MODULE_PARM_DESC(is_prof, "profiling each EP");
 #endif
 
@@ -158,13 +158,32 @@ MODULE_ALIAS("platform:" MUSB_DRIVER_NAME);
 
 #define U3D_FIFO_START_ADDRESS 0
 
+#ifdef SUPPORT_U3
+/*
+ * USB Speed Mode
+ * 0: High Speed
+ * 1: Super Speed
+ */
+#if defined(CONFIG_USB_MU3D_DEFAULT_U2_MODE) && !defined(U3_COMPLIANCE)
+unsigned int musb_speed = 0;
+#else
+unsigned int musb_speed = 1;
+#endif
+module_param_named(speed, musb_speed, uint, 0644);
+MODULE_PARM_DESC(debug, "USB speed configuration. default = 1, spuper speed.");
+#endif
+
 void __iomem *u3_base;
 void __iomem *u3_sif_base;
 void __iomem *u3_sif2_base;
 void __iomem *ap_uart0_base;
 
-#ifdef CONFIG_MTK_FPGA
+#ifdef CONFIG_FPGA_EARLY_PORTING
+#ifdef USB_ELBRUS
+void __iomem *i2c_base;
+#else
 void __iomem *i2c1_base;
+#endif
 #endif
 
 /*-------------------------------------------------------------------------*/
@@ -462,8 +481,7 @@ static irqreturn_t musb_stage0_irq(struct musb *musb, u32 int_usb, u8 devctl, u8
 	struct usb_otg *otg = musb->xceiv->otg;
 	irqreturn_t handled = IRQ_NONE;
 
-	dev_notice(musb->controller, "<== Power=%02x, DevCtl=%02x, int_usb=0x%x\n", power, devctl,
-		   int_usb);
+	os_printk(K_DEBUG, "<== Power=%02x, DevCtl=%02x, int_usb=0x%x\n", power, devctl, int_usb);
 
 	/* in host mode, the peripheral may issue remote wakeup.
 	 * in peripheral mode, the host may resume the link.
@@ -869,7 +887,6 @@ static void ep_prof_work(struct work_struct *data)
 static void musb_restore_context(struct musb *musb);
 static void musb_save_context(struct musb *musb);
 
-
 /*-------------------------------------------------------------------------*/
 /*
 * Program the HDRC to start (enable interrupts, dma, etc.).
@@ -878,12 +895,10 @@ void musb_start(struct musb *musb)
 {
 	u8 devctl = (u8) os_readl(U3D_DEVICE_CONTROL);
 
-	dev_dbg(musb->controller, "<== devctl %02x\n", devctl);
-
-	os_printk(K_INFO, "%s\n", __func__);
+	os_printk(K_INFO, "%s  <== devctl %02x\n", __func__, devctl);
 
 	if (musb->is_clk_on == 0) {
-#ifndef CONFIG_MTK_FPGA
+#ifndef CONFIG_FPGA_EARLY_PORTING
 		/* Recovert PHY. And turn on CLK. */
 		usb_phy_recover(musb->is_clk_on);
 		musb->is_clk_on = 1;
@@ -914,6 +929,8 @@ void musb_start(struct musb *musb)
 		udelay(20);
 
 		musb_restore_context(musb);
+
+		mu3d_reset_gpd_resource();
 	}
 
 	/*Enable Level 1 interrupt (BMU, QMU, MAC3, DMA, MAC2, EPCTL) */
@@ -943,6 +960,7 @@ void musb_start(struct musb *musb)
 
 	/* set vbus force enable */
 	os_setmsk(U3D_MISC_CTRL, (VBUS_FRC_EN | VBUS_ON));
+	os_writel(U3D_LTSSM_PARAMETER, (os_readl(U3D_LTSSM_PARAMETER) & ~DISABLE_NUM) | (0xf << DISABLE_NUM_OFST));
 #endif
 
 	/* device responses to u3_exit from host automatically */
@@ -960,22 +978,6 @@ void musb_start(struct musb *musb)
 	mu3d_hal_u3dev_dis();
 #endif
 
-#ifndef CONFIG_MTK_FPGA
-	/*if (mt_get_chip_hw_code() == 0x6595) */
-	{
-		os_printk(K_INFO, "%s Set Clock to 62.4MHz+\n", __func__);
-		/* sys_ck = OSC 124.8MHz/2 = 62.4MHz */
-		os_setmsk(U3D_SSUSB_SYS_CK_CTRL, SSUSB_SYS_CK_DIV2_EN);
-		/* U2 MAC sys_ck = ceil(62.4) = 63 */
-		os_writelmsk(U3D_USB20_TIMING_PARAMETER, 63, TIME_VALUE_1US);
-#ifdef SUPPORT_U3
-		/* U3 MAC sys_ck = ceil(62.4) = 63 */
-		os_writelmsk(U3D_TIMING_PULSE_CTRL, 63, CNT_1US_VALUE);
-#endif
-		os_printk(K_INFO, "%s Set Clock to 62.4MHz-\n", __func__);
-	}
-#endif
-
 	os_writel(U3D_LINK_RESET_INFO, os_readl(U3D_LINK_RESET_INFO) & ~WTCHRP);
 
 	/* U2/U3 detected by HW */
@@ -990,8 +992,19 @@ void musb_start(struct musb *musb)
 		schedule_delayed_work(&musb->ep_prof_work, msecs_to_jiffies(POLL_INTERVAL * 1000));
 #endif
 
-	if (musb->softconnect)
-		mu3d_hal_u3dev_en();
+	if (musb->softconnect) {
+#ifdef SUPPORT_U3
+		if (musb_speed && (musb->charger_mode == STANDARD_HOST))
+			mu3d_hal_u3dev_en();
+		else
+			mu3d_hal_u2dev_connect();
+#else
+		mu3d_hal_u2dev_connect();
+#endif
+	}
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+	mt_usb_dual_role_to_device();
+#endif
 }
 
 
@@ -1022,6 +1035,19 @@ static void gadget_stop(struct musb *musb)
 	}
 }
 
+static void set_ssusb_ip_sleep(struct musb *musb)
+{
+	/* Set below sequence to avoid power leakage */
+#if !defined(CONFIG_USB_MU3D_ONLY_U2_MODE)
+	os_setmsk(U3D_SSUSB_U3_CTRL_0P, SSUSB_U3_PORT_PDN | SSUSB_U3_PORT_DIS);
+#endif
+	os_setmsk(U3D_SSUSB_U2_CTRL_0P, SSUSB_U2_PORT_PDN | SSUSB_U2_PORT_DIS);
+	os_setmsk(U3D_SSUSB_IP_PW_CTRL2, SSUSB_IP_DEV_PDN);
+	os_setmsk(U3D_SSUSB_IP_PW_CTRL1, SSUSB_IP_HOST_PDN);
+	udelay(50);
+	os_setmsk(U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+}
+
 /*
  * Make the HDRC stop (disable interrupts, etc.);
  * reversible by musb_start
@@ -1032,6 +1058,10 @@ static void gadget_stop(struct musb *musb)
 void musb_stop(struct musb *musb)
 {
 	os_printk(K_INFO, "musb_stop\n");
+
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+	mt_usb_dual_role_to_none();
+#endif
 
 	/* stop IRQs, timers, ... */
 	musb_platform_disable(musb);
@@ -1061,12 +1091,12 @@ void musb_stop(struct musb *musb)
 	/* Set SSUSB_IP_SW_RST to avoid power leakage */
 #ifdef CONFIG_MTK_UART_USB_SWITCH
 	if (!in_uart_mode)
-		os_setmsk(U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+		set_ssusb_ip_sleep(musb);
 #else
-	os_setmsk(U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+	set_ssusb_ip_sleep(musb);
 #endif
 
-#ifndef CONFIG_MTK_FPGA
+#ifndef CONFIG_FPGA_EARLY_PORTING
 	/* Let PHY enter savecurrent mode. And turn off CLK. */
 	usb_phy_savecurrent(musb->is_clk_on);
 	musb->is_clk_on = 0;
@@ -1125,30 +1155,12 @@ static void musb_shutdown(struct platform_device *pdev)
 	|| defined(CONFIG_USB_MUSB_OMAP2PLUS_MODULE)	\
 	|| defined(CONFIG_USB_MUSB_AM35X)		\
 	|| defined(CONFIG_USB_MUSB_AM35X_MODULE)
-
-#ifdef CONFIG_USBIF_COMPLIANCE
 static ushort fifo_mode = 4;
-#else
-static ushort __initdata fifo_mode = 4;
-#endif
-
 #elif defined(CONFIG_USB_MUSB_UX500)			\
 	|| defined(CONFIG_USB_MUSB_UX500_MODULE)
-
-#ifdef CONFIG_USBIF_COMPLIANCE
 static ushort fifo_mode = 5;
 #else
-static ushort __initdata fifo_mode = 5;
-#endif
-
-#else
-
-#ifdef CONFIG_USBIF_COMPLIANCE
 static ushort fifo_mode = 2;
-#else
-static ushort __initdata fifo_mode = 2;
-#endif
-
 #endif
 
 /* "modprobe ... fifo_mode=1" etc */
@@ -1161,11 +1173,7 @@ MODULE_PARM_DESC(fifo_mode, "initial endpoint configuration");
  */
 
 /* mode 0 - fits in 2KB */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static struct musb_fifo_cfg mode_0_cfg[] = {
-#else
-static struct musb_fifo_cfg mode_0_cfg[] __initdata = {
-#endif
 	{.hw_ep_num = 1, .style = FIFO_TX, .maxpacket = 512,},
 	{.hw_ep_num = 1, .style = FIFO_RX, .maxpacket = 512,},
 	{.hw_ep_num = 2, .style = FIFO_RXTX, .maxpacket = 512,},
@@ -1174,11 +1182,7 @@ static struct musb_fifo_cfg mode_0_cfg[] __initdata = {
 };
 
 /* mode 1 - fits in 4KB */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static struct musb_fifo_cfg mode_1_cfg[] = {
-#else
-static struct musb_fifo_cfg mode_1_cfg[] __initdata = {
-#endif
 	{.hw_ep_num = 1, .style = FIFO_TX, .maxpacket = 512, .mode = BUF_DOUBLE,},
 	{.hw_ep_num = 1, .style = FIFO_RX, .maxpacket = 512, .mode = BUF_DOUBLE,},
 	{.hw_ep_num = 2, .style = FIFO_RXTX, .maxpacket = 512, .mode = BUF_DOUBLE,},
@@ -1187,11 +1191,7 @@ static struct musb_fifo_cfg mode_1_cfg[] __initdata = {
 };
 
 /* mode 2 - fits in 4KB */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static struct musb_fifo_cfg mode_2_cfg[] = {
-#else
-static struct musb_fifo_cfg mode_2_cfg[] __initdata = {
-#endif
 	{.hw_ep_num = 1, .style = FIFO_TX, .maxpacket = 512,},
 	{.hw_ep_num = 1, .style = FIFO_RX, .maxpacket = 512,},
 	{.hw_ep_num = 2, .style = FIFO_TX, .maxpacket = 512,},
@@ -1201,11 +1201,7 @@ static struct musb_fifo_cfg mode_2_cfg[] __initdata = {
 };
 
 /* mode 3 - fits in 4KB */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static struct musb_fifo_cfg mode_3_cfg[] = {
-#else
-static struct musb_fifo_cfg mode_3_cfg[] __initdata = {
-#endif
 	{.hw_ep_num = 1, .style = FIFO_TX, .maxpacket = 512, .mode = BUF_DOUBLE,},
 	{.hw_ep_num = 1, .style = FIFO_RX, .maxpacket = 512, .mode = BUF_DOUBLE,},
 	{.hw_ep_num = 2, .style = FIFO_TX, .maxpacket = 512,},
@@ -1215,11 +1211,7 @@ static struct musb_fifo_cfg mode_3_cfg[] __initdata = {
 };
 
 /* mode 4 - fits in 16KB */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static struct musb_fifo_cfg mode_4_cfg[] = {
-#else
-static struct musb_fifo_cfg mode_4_cfg[] __initdata = {
-#endif
 	{.hw_ep_num = 1, .style = FIFO_TX, .maxpacket = 512,},
 	{.hw_ep_num = 1, .style = FIFO_RX, .maxpacket = 512,},
 	{.hw_ep_num = 2, .style = FIFO_TX, .maxpacket = 512,},
@@ -1250,11 +1242,7 @@ static struct musb_fifo_cfg mode_4_cfg[] __initdata = {
 };
 
 /* mode 5 - fits in 8KB */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static struct musb_fifo_cfg mode_5_cfg[] = {
-#else
-static struct musb_fifo_cfg mode_5_cfg[] __initdata = {
-#endif
 	{.hw_ep_num = 1, .style = FIFO_TX, .maxpacket = 512,},
 	{.hw_ep_num = 1, .style = FIFO_RX, .maxpacket = 512,},
 	{.hw_ep_num = 2, .style = FIFO_TX, .maxpacket = 512,},
@@ -1310,13 +1298,8 @@ void ep0_setup(struct musb *musb, struct musb_hw_ep *hw_ep0, const struct musb_f
  *
  * returns negative errno or offset for next fifo.
  */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static int fifo_setup(struct musb *musb, struct musb_hw_ep *hw_ep, const struct musb_fifo_cfg *cfg,
 		      u16 offset)
-#else
-static int __init
-fifo_setup(struct musb *musb, struct musb_hw_ep *hw_ep, const struct musb_fifo_cfg *cfg, u16 offset)
-#endif
 {
 	u16 maxpacket = cfg->maxpacket;
 	/* u16   c_off = offset >> 3; */
@@ -1385,11 +1368,7 @@ struct musb_fifo_cfg ep0_cfg_u2 = {
 	.style = FIFO_RXTX, .maxpacket = 64,
 };
 
-#ifdef CONFIG_USBIF_COMPLIANCE
 static int ep_config_from_table(struct musb *musb)
-#else
-static int __init ep_config_from_table(struct musb *musb)
-#endif
 {
 	const struct musb_fifo_cfg *cfg;
 	unsigned i, n;
@@ -1533,11 +1512,7 @@ enum { MUSB_CONTROLLER_MHDRC, MUSB_CONTROLLER_HDRC, };
 /* Initialize MUSB (M)HDRC part of the USB hardware subsystem;
  * configure endpoints, or take their config from silicon
  */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static int musb_core_init(u16 musb_type, struct musb *musb)
-#else
-static int __init musb_core_init(u16 musb_type, struct musb *musb)
-#endif
 {
 	/* u8 reg; */
 	/* char *type; */
@@ -1916,10 +1891,10 @@ static ssize_t
 musb_srp_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t n)
 {
 	struct musb *musb = dev_to_musb(dev);
-	unsigned short srp;
+	unsigned long srp;
 
 	/*if (sscanf(buf, "%hu", &srp) != 1 || (srp != 1)) {*/
-	if (kstrtol(buf, 10, (long *)&srp) != 1 || (srp != 1)) {
+	if (kstrtol(buf, 10, &srp) != 1 || (srp != 1)) {
 		dev_err(dev, "SRP: Value must be 1\n");
 		return -EINVAL;
 	}
@@ -1940,6 +1915,10 @@ DEVICE_ATTR(rx, 0444, musb_rx_show, NULL);
 DEVICE_ATTR(uartpath, 0444, musb_uart_path_show, NULL);
 #endif
 
+#ifdef CONFIG_MTK_SIB_USB_SWITCH
+DEVICE_ATTR(sib_enable, 0664, musb_sib_enable_show, musb_sib_enable_store);
+#endif
+
 static struct attribute *musb_attributes[] = {
 	&dev_attr_mode.attr,
 	&dev_attr_vbus.attr,
@@ -1950,6 +1929,9 @@ static struct attribute *musb_attributes[] = {
 	&dev_attr_tx.attr,
 	&dev_attr_rx.attr,
 	&dev_attr_uartpath.attr,
+#endif
+#ifdef CONFIG_MTK_SIB_USB_SWITCH
+	&dev_attr_sib_enable.attr,
 #endif
 	NULL
 };
@@ -1962,6 +1944,9 @@ static const struct attribute_group musb_attr_group = {
 
 static void musb_save_context(struct musb *musb)
 {
+#if 1
+	os_printk(K_INFO, "SKIP %s\n", __func__);
+#else
 	int i;
 
 	for (i = 0; i < musb->config->num_eps; ++i) {
@@ -1976,10 +1961,14 @@ static void musb_save_context(struct musb *musb)
 			  musb->context.index_regs[i].rxqmuaddr);
 #endif
 	}
+#endif
 }
 
 static void musb_restore_context(struct musb *musb)
 {
+#if 1
+	os_printk(K_INFO, "SKIP %s\n", __func__);
+#else
 	int i;
 
 	for (i = 0; i < musb->config->num_eps; ++i) {
@@ -1992,6 +1981,7 @@ static void musb_restore_context(struct musb *musb)
 			  os_readl(USB_QMU_RQSAR(i + 1)));
 #endif
 	}
+#endif
 }
 
 static void musb_suspend_work(struct work_struct *data)
@@ -2002,7 +1992,7 @@ static void musb_suspend_work(struct work_struct *data)
 		  musb->is_clk_on);
 
 	if (musb->is_clk_on == 1
-	    && (!usb_cable_connected() || (musb->usb_mode != CABLE_MODE_NORMAL))) {
+	    && !usb_cable_connected()) {
 
 #ifdef EP_PROFILING
 		cancel_delayed_work_sync(&musb->ep_prof_work);
@@ -2015,10 +2005,9 @@ static void musb_suspend_work(struct work_struct *data)
 		 */
 		musb_save_context(musb);
 
-		/* Set SSUSB_IP_SW_RST to avoid power leakage */
-		os_setmsk(U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+		set_ssusb_ip_sleep(musb);
 
-#ifndef CONFIG_MTK_FPGA
+#ifndef CONFIG_FPGA_EARLY_PORTING
 		/* Let PHY enter savecurrent mode. And turn off CLK. */
 		usb_phy_savecurrent(musb->is_clk_on);
 		musb->is_clk_on = 0;
@@ -2049,23 +2038,20 @@ const struct hc_driver musb_hc_driver = {
 };
 
 #ifdef CONFIG_USB_C_SWITCH
+#ifndef CONFIG_TCPC_CLASS
 static struct typec_switch_data switch_driver = {
 	.name = (char *)musb_driver_name,
 	.type = DEVICE_TYPE,
 	.enable		= typec_switch_usb_connect,
 	.disable	= typec_switch_usb_disconnect,
 };
+#endif /* CONFIG_TCPC_CLASS */
 #endif
 /* --------------------------------------------------------------------------
  * Init support
  */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static struct musb *allocate_instance(struct device *dev,
 				      struct musb_hdrc_config *config, void __iomem *mbase)
-#else
-static struct musb *__init
-allocate_instance(struct device *dev, struct musb_hdrc_config *config, void __iomem *mbase)
-#endif
 {
 	struct musb *musb;
 	struct musb_hw_ep *ep;
@@ -2106,8 +2092,10 @@ allocate_instance(struct device *dev, struct musb_hdrc_config *config, void __io
 	/* musb->xceiv->state = OTG_STATE_B_IDLE; //initial its value */
 
 #ifdef CONFIG_DEBUG_FS
+#ifndef USB_ELBRUS
 	if (usb20_phy_init_debugfs())
 		os_printk(K_ERR, "usb20_phy_init_debugfs fail!\n");
+#endif
 #endif
 
 	return musb;
@@ -2179,17 +2167,14 @@ static void musb_free(struct musb *musb)
  * @mregs: virtual address of controller registers,
  *	not yet corrected for platform-specific offsets
  */
-#ifdef CONFIG_USBIF_COMPLIANCE
 static int musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
-#else
-static int __init musb_init_controller(struct device *dev, int nIrq, void __iomem *ctrl)
-#endif
 {
 	int status;
 	struct musb *musb;
 	struct musb_hdrc_platform_data *plat = dev->platform_data;
+#ifndef CONFIG_USBIF_COMPLIANCE
 	struct usb_hcd *hcd;
-
+#endif
 	/* The driver might handle more features than the board; OK.
 	 * Fail when the board needs a feature that's not enabled.
 	 */
@@ -2278,10 +2263,12 @@ static int __init musb_init_controller(struct device *dev, int nIrq, void __iome
 		goto fail3;
 
 #ifdef CONFIG_USB_C_SWITCH
+#ifndef CONFIG_TCPC_CLASS
 	switch_driver.priv_data = musb;
 	status = register_typec_switch_callback(&switch_driver);
 	if (status < 0)
 		goto fail3;
+#endif
 #endif
 
 	/* REVISIT-J: Do _NOT_ support OTG functionality */
@@ -2366,6 +2353,13 @@ static int __init musb_init_controller(struct device *dev, int nIrq, void __iome
 		), ctrl, (is_dma_capable() && musb->dma_controller)
 		? "DMA" : "PIO", musb->nIrq);
 
+	/* only enable on iddig mode */
+#ifndef CONFIG_USB_C_SWITCH
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+	mt_usb_dual_role_init(musb);
+#endif
+#endif
+
 	return 0;
 
 fail5:
@@ -2407,6 +2401,7 @@ static void __iomem *acquire_reg_base(struct platform_device *pdev, const char *
 		pr_err("Can't get resource for %s\n", res_name);
 		goto end;
 	}
+	os_printk(K_INFO, "iomem=0x%lx\n", (uintptr_t) iomem->start);
 
 	base = ioremap(iomem->start, resource_size(iomem));
 	if (!(uintptr_t) base) {
@@ -2425,11 +2420,9 @@ end:
  */
 #ifdef CONFIG_USBIF_COMPLIANCE
 static int mu3d_normal_driver_on;
+#endif
 
 static int musb_probe(struct platform_device *pdev)
-#else
-static int __init musb_probe(struct platform_device *pdev)
-#endif
 {
 	struct device *dev = &pdev->dev;
 	int irq = platform_get_irq_byname(pdev, MUSB_DRIVER_NAME);
@@ -2467,7 +2460,16 @@ static int __init musb_probe(struct platform_device *pdev)
 	}
 #endif
 
-#ifdef CONFIG_MTK_FPGA
+#ifdef CONFIG_FPGA_EARLY_PORTING
+#ifdef USB_ELBRUS
+	/*Elbrus FPGA use I2C channel2*/
+	i2c_base = ioremap(0x110A0000, 0x1000);
+	if (!(i2c_base)) {
+		pr_err("Can't remap I2C BASE\n");
+		status = -ENOMEM;
+	}
+	os_printk(K_INFO, "I2C BASE=0x%lx\n", (uintptr_t) (i2c_base));
+#else
 	/*i2c1_base = ioremap(0x11008000, 0x1000); */
 	i2c1_base = ioremap(0x11009000, 0x1000);
 	if (!(i2c1_base)) {
@@ -2475,6 +2477,7 @@ static int __init musb_probe(struct platform_device *pdev)
 		status = -ENOMEM;
 	}
 	os_printk(K_INFO, "I2C1 BASE=0x%lx\n", (uintptr_t) (i2c1_base));
+#endif
 #endif
 
 	status = musb_init_controller(dev, irq, u3_base);
@@ -2500,8 +2503,9 @@ exit_regs:
 static int musb_remove(struct platform_device *pdev)
 {
 	struct musb *musb = dev_to_musb(&pdev->dev);
+#ifndef CONFIG_USBIF_COMPLIANCE
 	void __iomem *ctrl_base = musb->ctrl_base;
-
+#endif
 	/* this gets called on rmmod.
 	 *  - Host mode: host may still be active
 	 *  - Peripheral mode: peripheral is deactivated (or never-activated)
@@ -2760,15 +2764,13 @@ static int musb_suspend_noirq(struct device *dev)
 	 */
 	musb_save_context(musb);
 
-	/* Set SSUSB_IP_SW_RST to avoid power leakage */
-	os_setmsk(U3D_SSUSB_IP_PW_CTRL0, SSUSB_IP_SW_RST);
+	set_ssusb_ip_sleep(musb);
 
-#ifndef CONFIG_MTK_FPGA
+#ifndef CONFIG_FPGA_EARLY_PORTING
 	/* Let PHY enter savecurrent mode. And turn off CLK. */
 	usb_phy_savecurrent(musb->is_clk_on);
 	musb->is_clk_on = 0;
 #endif
-
 
 	return 0;
 }
@@ -2779,7 +2781,7 @@ static int musb_resume_noirq(struct device *dev)
 
 	os_printk(K_INFO, "%s\n", __func__);
 
-#ifndef CONFIG_MTK_FPGA
+#ifndef CONFIG_FPGA_EARLY_PORTING
 	/* Recovert PHY. And turn on CLK. */
 	usb_phy_recover(musb->is_clk_on);
 	musb->is_clk_on = 1;
@@ -2851,6 +2853,61 @@ static struct platform_driver musb_driver = {
 	.shutdown = musb_shutdown,
 };
 
+static int usb_test_wakelock_inited;
+static struct wake_lock usb_test_wakelock;
+int mu3d_force_on;
+static int set_mu3d_force_on(const char *val, const struct kernel_param *kp)
+{
+	int option;
+	int rv;
+
+	rv = kstrtoint(val, 10, &option);
+	if (rv != 0)
+		return rv;
+
+	os_printk(K_WARNIN, "mu3d_force_on:%d, option:%d\n", mu3d_force_on, option);
+	if (option == 0 || option == 1) {
+		os_printk(K_WARNIN, "update to %d\n", option);
+		mu3d_force_on = option;
+	}
+
+	switch (option) {
+	case 2:
+		os_printk(K_WARNIN, "trigger reconnect\n");
+		mt_usb_connect();
+		break;
+	case 3:
+		os_printk(K_WARNIN, "start connect test\n");
+		mt_usb_connect_test(1);
+		break;
+	case 4:
+		os_printk(K_WARNIN, "stop connect test\n");
+		mt_usb_connect_test(0);
+		break;
+	case 5:
+		os_printk(K_WARNIN, "wake_lock usb_test_wakelock\n");
+		if (!usb_test_wakelock_inited) {
+			os_printk(K_WARNIN, "%s wake_lock_init\n", __func__);
+			wake_lock_init(&usb_test_wakelock, WAKE_LOCK_SUSPEND, "usb.test.lock");
+			usb_test_wakelock_inited = 1;
+		}
+		wake_lock(&usb_test_wakelock);
+		break;
+	case 6:
+		os_printk(K_WARNIN, "wake_unlock usb_test_wakelock\n");
+		wake_unlock(&usb_test_wakelock);
+		break;
+	default:
+		break;
+	}
+	return 0;
+}
+static struct kernel_param_ops mu3d_force_on_param_ops = {
+	.set = set_mu3d_force_on,
+	.get = param_get_int,
+};
+module_param_cb(mu3d_force_on, &mu3d_force_on_param_ops, &mu3d_force_on, 0400);
+
 /*-------------------------------------------------------------------------*/
 #ifdef CONFIG_USBIF_COMPLIANCE
 static int musb_mu3d_proc_show(struct seq_file *seq, void *v)
@@ -2867,16 +2924,7 @@ static int musb_mu3d_proc_open(struct inode *inode, struct file *file)
 static ssize_t musb_mu3d_proc_write(struct file *file, const char __user *buf, size_t length,
 				    loff_t *ppos)
 {
-	int ret;
 	char msg[32];
-	int result;
-	int status;
-	struct device *dev;
-	int irq;
-	struct resource *iomem;
-	void __iomem *base;
-	struct musb *musb;
-	void __iomem *ctrl_base;
 
 	if (length >= sizeof(msg)) {
 		os_printk(K_ERR, "musb_mu3d_proc_write length error, the error len is %d\n",
@@ -2956,7 +3004,6 @@ static void __exit musb_cleanup(void)
 	if (mu3d_normal_driver_on == 1)
 		platform_driver_unregister(&musb_driver);
 
-	return 0;
 }
 module_exit(musb_cleanup);
 #else
@@ -2977,4 +3024,3 @@ static void __exit musb_cleanup(void)
 }
 module_exit(musb_cleanup);
 #endif
-

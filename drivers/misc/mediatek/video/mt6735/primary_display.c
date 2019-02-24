@@ -8042,6 +8042,41 @@ int primary_display_setbacklight(unsigned int level)
 	return ret;
 }
 
+int primary_display_setcabc(unsigned int mode)
+{
+	DISPFUNC();
+	printk("%s begin\n",__func__);
+#ifdef DISP_SWITCH_DST_MODE
+	_primary_path_switch_dst_lock();
+#endif
+	_primary_path_cmd_lock();
+	_primary_path_lock(__func__);
+
+	if(pgc->state == DISP_SLEPT)
+	{
+		DISPMSG("Can`t set CABC mode while display is sleeping\n");
+	}
+	else
+	{
+		disp_update_trigger_time();
+		if(primary_display_cmdq_enabled())	
+		{	
+			if(primary_display_is_video_mode())
+			{
+				disp_lcm_set_cabc(pgc->plcm,mode);
+			}
+		}
+	}
+
+	_primary_path_unlock(__func__);
+	_primary_path_cmd_unlock();
+#ifdef DISP_SWITCH_DST_MODE
+	_primary_path_switch_dst_unlock();
+#endif
+	printk("%s end\n",__func__);
+	return 0;
+}
+
 int primary_display_set_cmd(int *lcm_cmd, unsigned int cmd_num)
 {
 	int ret = 0;

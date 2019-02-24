@@ -1,3 +1,16 @@
+/*
+ * Copyright (C) 2015 MediaTek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ */
+
 #include <xhci.h>
 #include "xhci-mtk-driver.h"
 #include "xhci-mtk-power.h"
@@ -8,7 +21,6 @@
 #include <linux/dma-mapping.h>
 #include <linux/platform_device.h>
 #include <linux/wakelock.h>
-#ifdef CONFIG_USB_MTK_DUALMODE
 /*#include <mt-plat/eint.h>*/
 #include <linux/irq.h>
 #include <linux/switch.h>
@@ -29,10 +41,7 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 
-#ifdef CONFIG_PROJECT_PHY
 #include <mtk-phy-asic.h>
-#endif
-#endif
 
 #include <hub.h>
 #include <linux/jiffies.h>
@@ -58,14 +67,34 @@
 #endif
 #endif
 
-#define mtk_xhci_mtk_log(fmt, args...) \
-	pr_notice("%s(%d): " fmt, __func__, __LINE__, ##args)
+#ifdef CONFIG_USBIF_COMPLIANCE
+#include <linux/proc_fs.h>
+#endif
 
 #define RET_SUCCESS 0
 #define RET_FAIL 1
 
-struct xhci_hcd *mtk_xhci;
+#ifdef CONFIG_TCPC_CLASS
+#include "tcpm.h"
+#include <linux/workqueue.h>
+#include <linux/mutex.h>
+static struct notifier_block otg_nb;
+static bool usbc_otg_attached;
+static struct tcpc_device *otg_tcpc_dev;
+static struct workqueue_struct *otg_tcpc_power_workq;
+static struct workqueue_struct *otg_tcpc_workq;
+static struct work_struct tcpc_otg_power_work;
+static struct work_struct tcpc_otg_work;
+static bool usbc_otg_power_enable;
+static bool usbc_otg_enable;
+static struct mutex tcpc_otg_lock;
+static struct mutex tcpc_otg_pwr_lock;
+static bool tcpc_boost_on;
+#else /* not defined CONFIG_TCPC_CLASS */
 static int vbus_on;
+#endif /* CONFIG_TCPC_CLASS */
+
+struct xhci_hcd *mtk_xhci;
 
 static struct wake_lock mtk_xhci_wakelock;
 
@@ -82,6 +111,39 @@ void __iomem *i2c1_base;
 /* struct u3phy_operator *u3phy_ops; */
 
 #ifdef CONFIG_USB_MTK_DUALMODE
+#ifdef CONFIG_USB_MTK_OTG_SWITCH
+static bool otg_switch_state;
+static struct pinctrl *pinctrl;
+static struct pinctrl_state *pinctrl_iddig_init;
+static struct pinctrl_state *pinctrl_iddig_enable;
+static struct pinctrl_state *pinctrl_iddig_disable;
+
+static struct mutex otg_switch_mutex;
+static ssize_t otg_mode_show(struct device *dev,
+				struct device_attribute *attr, char *buf);
+static ssize_t otg_mode_store(struct device *dev,
+				struct device_attribute *attr, const char *buf, size_t count);
+
+DEVICE_ATTR(otg_mode, 0664, otg_mode_show, otg_mode_store);
+
+static struct attribute *otg_attributes[] = {
+	&dev_attr_otg_mode.attr,
+	NULL
+};
+
+static const struct attribute_group otg_attr_group = {
+	.attrs = otg_attributes,
+};
+#endif
+
+static const struct of_device_id otg_switch_of_match[] = {
+	{.compatible = "mediatek,otg_switch"},
+	{},
+};
+
+static bool otg_iddig_isr_enable;
+static int mtk_xhci_eint_iddig_irq_en(void);
+
 enum idpin_state {
 	IDPIN_OUT,
 	IDPIN_IN_HOST,
@@ -93,9 +155,11 @@ static enum idpin_state mtk_idpin_cur_stat = IDPIN_OUT;
 static struct switch_dev mtk_otg_state;
 
 static struct delayed_work mtk_xhci_delaywork;
+int xhci_debug_level = K_ALET | K_CRIT | K_ERR | K_WARNIN;
 
-int mtk_iddig_debounce = 10;
-module_param(mtk_iddig_debounce, int, 0644);
+int mtk_iddig_debounce = 50;
+module_param(mtk_iddig_debounce, int, 0400);
+module_param(xhci_debug_level, int, 0400);
 
 void switch_int_to_host_and_mask(void)
 {
@@ -124,13 +188,13 @@ static void mtk_set_iddig_in_detect(void)
 
 static bool mtk_is_charger_4_vol(void)
 {
-	int vol = battery_meter_get_charger_voltage();
-
-	mtk_xhci_mtk_log("voltage(%d)\n", vol);
-
 #if defined(CONFIG_USBIF_COMPLIANCE) || defined(CONFIG_POWER_EXT)
 	return false;
 #else
+	int vol = battery_meter_get_charger_voltage();
+
+	mtk_xhci_mtk_printk(K_DEBUG, "voltage(%d)\n", vol);
+
 	return (vol > 4000) ? true : false;
 #endif
 }
@@ -187,7 +251,7 @@ void mtk_enable_pmic_otg_mode(void)
 
 	vbus_on++;
 	/* / vbus_on =1; */
-	mtk_xhci_mtk_log("set pmic power on, %d\n", vbus_on);
+	mtk_xhci_mtk_printk(K_DEBUG, "set pmic power on, %d\n", vbus_on);
 #if 1
 	if (vbus_on > 1)
 		return;
@@ -243,7 +307,8 @@ void mtk_enable_pmic_otg_mode(void)
 #ifdef CONFIG_MTK_OTG_OC_DETECTOR
 	schedule_delayed_work_on(0, &mtk_xhci_oc_delaywork, msecs_to_jiffies(OC_DETECTOR_TIMER));
 #endif
-	mtk_xhci_mtk_log("set pmic power on(cnt:%d), done\n", cnt);
+	mtk_xhci_mtk_printk(K_DEBUG, "set pmic power on(cnt:%d), done\n", cnt);
+
 }
 
 void mtk_disable_pmic_otg_mode(void)
@@ -254,7 +319,7 @@ void mtk_disable_pmic_otg_mode(void)
 	/* /vbus_on = 0; */
 
 	vbus_on--;
-	mtk_xhci_mtk_log("set pmic power off %d\n", vbus_on);
+	mtk_xhci_mtk_printk(K_DEBUG, "set pmic power off %d\n", vbus_on);
 
 	if (vbus_on < 0 || vbus_on > 0) {
 		if (vbus_on < 0)
@@ -289,7 +354,7 @@ void mtk_disable_pmic_otg_mode(void)
 #ifdef CONFIG_MTK_OTG_OC_DETECTOR
 	cancel_delayed_work(&mtk_xhci_oc_delaywork);
 #endif
-	mtk_xhci_mtk_log("set pmic power off(cnt:%d), done\n", cnt);
+	mtk_xhci_mtk_printk(K_DEBUG, "set pmic power off(cnt:%d), done\n", cnt);
 }
 
 #ifdef CONFIG_MTK_OTG_OC_DETECTOR
@@ -300,11 +365,11 @@ void xhci_send_event(char *event)
 	int ret;
 
 	snprintf(udev_event, 128, "XHCI_MISC_UEVENT=%s", event);
-	mtk_xhci_mtk_log("send %s in %s\n", udev_event,
+	mtk_xhci_mtk_printk(K_DEBUG, "send %s in %s\n", udev_event,
 			 kobject_get_path(&xhci_misc_uevent.this_device->kobj, GFP_KERNEL));
 	ret = kobject_uevent_env(&xhci_misc_uevent.this_device->kobj, KOBJ_CHANGE, envp);
 	if (ret < 0)
-		mtk_xhci_mtk_log("fail, ret(%d)\n", ret);
+		mtk_xhci_mtk_printk(K_DEBUG, "fail, ret(%d)\n", ret);
 }
 
 static bool mtk_is_over_current(void)
@@ -312,7 +377,7 @@ static bool mtk_is_over_current(void)
 	int vol = battery_meter_get_charger_voltage();
 
 	if (vol < 4200) {
-		mtk_xhci_mtk_log("over current occurs, voltage(%d)\n", vol);
+		mtk_xhci_mtk_printk(K_DEBUG, "over current occur, vol(%d)\n", vol);
 		return true;
 	}
 
@@ -374,20 +439,21 @@ int mtk_is_hub_active(void)
 #endif
 static void mtk_enable_otg_mode(void)
 {
-#if defined(CONFIG_MTK_BQ25896_SUPPORT)
-	bq25890_otg_en(0x01);
-	bq25890_set_boost_ilim(0x03);	/* 1.3A */
-#elif defined(CONFIG_MTK_OTG_PMIC_BOOST_5V)
-	mtk_enable_pmic_otg_mode();
+#if defined(CONFIG_MTK_BQ25898_DUAL_SUPPORT)
+	bq25898_otg_en(0x01);
+	bq25898_set_boost_ilim(0x01);
+#else
+	set_chr_enable_otg(0x1);
+	set_chr_boost_current_limit(1500);
 #endif
 }
 
 static void mtk_disable_otg_mode(void)
 {
-#if defined(CONFIG_MTK_BQ25896_SUPPORT)
-	bq25890_otg_en(0x0);
-#elif defined(CONFIG_MTK_OTG_PMIC_BOOST_5V)
-	mtk_disable_pmic_otg_mode();
+#if defined(CONFIG_MTK_BQ25898_DUAL_SUPPORT)
+	bq25898_otg_en(0x0);
+#else
+	set_chr_enable_otg(0x0);
 #endif
 }
 
@@ -466,8 +532,87 @@ static void mtk_xhci_imod_set(u32 imod)
 	writel(temp, &mtk_xhci->ir_set->irq_control);
 }
 
+static struct delayed_work host_plug_test_work;
+static int host_plug_test_enable; /* default disable */
+module_param(host_plug_test_enable, int, 0400);
+static int host_plug_in_test_period_ms = 5000;
+module_param(host_plug_in_test_period_ms, int, 0400);
+static int host_plug_out_test_period_ms = 5000;
+module_param(host_plug_out_test_period_ms, int, 0400);
+static int host_test_vbus_off_time_us = 3000;
+module_param(host_test_vbus_off_time_us, int, 0400);
+static int host_test_vbus_only = 1;
+module_param(host_test_vbus_only, int, 0400);
+static int host_plug_test_triggered;
+static int host_req;
+static struct wake_lock host_test_wakelock;
+static int _mtk_xhci_driver_load(void);
+static void _mtk_xhci_driver_unload(void);
+static void do_host_plug_test_work(struct work_struct *data)
+{
+	static ktime_t ktime_begin, ktime_end;
+	static s64 diff_time;
+	static int host_on;
+	static int wake_lock_inited;
 
-static int mtk_xhci_driver_load(void)
+	if (!wake_lock_inited) {
+		mtk_xhci_mtk_printk(K_ALET, "%s wake_lock_init\n", __func__);
+		wake_lock_init(&host_test_wakelock, WAKE_LOCK_SUSPEND, "host.test.lock");
+		wake_lock_inited = 1;
+	}
+
+	host_plug_test_triggered = 1;
+	/* sync global status */
+	mb();
+	wake_lock(&host_test_wakelock);
+	mtk_xhci_mtk_printk(K_ALET, "BEGIN");
+	ktime_begin = ktime_get();
+
+	host_on  = 1;
+	while (1) {
+		if (!host_req && host_on) {
+			mtk_xhci_mtk_printk(K_ALET, "about to exit, host_on<%d>\n", host_on);
+			break;
+		}
+		msleep(50);
+
+		ktime_end = ktime_get();
+		diff_time = ktime_to_ms(ktime_sub(ktime_end, ktime_begin));
+		if (host_on && diff_time >= host_plug_in_test_period_ms) {
+			host_on = 0;
+			mtk_xhci_mtk_printk(K_ALET, "OFF\n");
+
+			ktime_begin = ktime_get();
+
+			/* simulate plug out */
+			mtk_disable_otg_mode();
+			udelay(host_test_vbus_off_time_us);
+
+			if (!host_test_vbus_only)
+				_mtk_xhci_driver_unload();
+		} else if (!host_on && diff_time >= host_plug_out_test_period_ms) {
+			host_on = 1;
+			mtk_xhci_mtk_printk(K_ALET, "ON\n");
+
+			ktime_begin = ktime_get();
+			if (!host_test_vbus_only)
+				_mtk_xhci_driver_load();
+
+			mtk_enable_otg_mode();
+			msleep(100);
+		}
+	}
+
+	/* from ON to OFF state */
+	msleep(1000);
+	_mtk_xhci_driver_unload();
+
+	host_plug_test_triggered = 0;
+	wake_unlock(&host_test_wakelock);
+	mtk_xhci_mtk_printk(K_ALET, "END\n");
+}
+
+static int _mtk_xhci_driver_load(void)
 {
 	int ret = 0;
 
@@ -488,23 +633,20 @@ static int mtk_xhci_driver_load(void)
 	mtk_enable_otg_mode();
 	enableXhciAllPortPower(mtk_xhci);
 
+	if (host_plug_test_enable && !host_plug_test_triggered)
+		schedule_delayed_work(&host_plug_test_work, 0);
+
 	return 0;
 
 _err:
-	mtk_xhci_mtk_log("ret(%d), mtk_xhci(0x%p)\n", ret, mtk_xhci);
+	mtk_xhci_mtk_printk(K_ERR, "ret(%d), mtk_xhci(0x%p)\n", ret, mtk_xhci);
 #ifdef CONFIG_PROJECT_PHY
 	usb_phy_savecurrent(1);
 #endif
 	return ret;
 }
 
-static void mtk_xhci_disPortPower(void)
-{
-	mtk_disable_otg_mode();
-	disableXhciAllPortPower(mtk_xhci);
-}
-
-static void mtk_xhci_driver_unload(void)
+static void _mtk_xhci_driver_unload(void)
 {
 	mtk_xhci_hcd_cleanup();
 	/* close clock/power setting and assert reset bit of mac */
@@ -514,6 +656,48 @@ static void mtk_xhci_driver_unload(void)
 
 }
 
+int mtk_xhci_driver_load(void)
+{
+	static int host_plug_test_work_inited;
+
+	host_req = 1;
+
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+	mt_usb_dual_role_to_host();
+#endif
+
+	if (!host_plug_test_work_inited) {
+		INIT_DELAYED_WORK(&host_plug_test_work, do_host_plug_test_work);
+		host_plug_test_work_inited = 1;
+	}
+
+	if (host_plug_test_triggered)
+		return 0;
+
+	return _mtk_xhci_driver_load();
+}
+
+void mtk_xhci_driver_unload(void)
+{
+	host_req = 0;
+
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+	mt_usb_dual_role_to_none();
+#endif
+
+	if (host_plug_test_triggered)
+		return;
+
+	_mtk_xhci_driver_unload();
+}
+
+static void mtk_xhci_disPortPower(void)
+{
+	mtk_disable_otg_mode();
+	disableXhciAllPortPower(mtk_xhci);
+}
+
+
 void mtk_xhci_switch_init(void)
 {
 	mtk_otg_state.name = "otg_state";
@@ -522,9 +706,9 @@ void mtk_xhci_switch_init(void)
 
 #ifndef CONFIG_USBIF_COMPLIANCE
 	if (switch_dev_register(&mtk_otg_state))
-		mtk_xhci_mtk_log("switch_dev_register fail\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "switch_dev_register fail\n");
 	else
-		mtk_xhci_mtk_log("switch_dev register success\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "switch_dev register success\n");
 #endif
 }
 
@@ -534,7 +718,7 @@ void mtk_xhci_mode_switch(struct work_struct *work)
 	static bool is_pwoff;
 	int ret = 0;
 
-	mtk_xhci_mtk_log("mtk_xhci_mode_switch\n");
+	mtk_xhci_mtk_printk(K_DEBUG, "mtk_xhci_mode_switch\n");
 
 	if (musb_check_ipo_state() == true) {
 		enable_irq(mtk_idpin_irqnum); /* prevent from disable irq twice*/
@@ -569,7 +753,7 @@ void mtk_xhci_mode_switch(struct work_struct *work)
 			/* if(mtk_is_hub_active()){
 			   is_pwoff = true;
 			   schedule_delayed_work_on(0, &mtk_xhci_delaywork, msecs_to_jiffies(mtk_iddig_debounce));
-			   mtk_xhci_mtk_log("wait, hub is still active, ep cnt %d !!!\n", mtk_ep_count);
+			   mtk_xhci_mtk_printk(K_DEBUG, "wait, hub is still active, ep cnt %d !!!\n", mtk_ep_count);
 			   return;
 			   } */
 			/* USB PLL Force settings */
@@ -592,7 +776,7 @@ void mtk_xhci_mode_switch(struct work_struct *work)
 	}
 
 done:
-	mtk_xhci_mtk_log("current mode is %s, ret(%d), switch(%d)\n",
+	mtk_xhci_mtk_printk(K_ALET, "current mode is %s, ret(%d), switch(%d)\n",
 			 (mtk_idpin_cur_stat == IDPIN_IN_HOST) ? "host" :
 			 (mtk_idpin_cur_stat == IDPIN_IN_DEVICE) ? "id_device" : "device",
 			 ret, mtk_otg_state.state);
@@ -600,20 +784,47 @@ done:
 
 static irqreturn_t xhci_eint_iddig_isr(int irqnum, void *data)
 {
+	disable_irq_nosync(irqnum);
 	schedule_delayed_work(&mtk_xhci_delaywork, msecs_to_jiffies(mtk_iddig_debounce));
 	/* microseconds */
 	/*
 	ret =
 		schedule_delayed_work_on(0, &mtk_xhci_delaywork, msecs_to_jiffies(mtk_iddig_debounce));
 	*/
-	mtk_xhci_mtk_log("xhci_eint_iddig_isr\n");
-	disable_irq_nosync(irqnum);
+	mtk_xhci_mtk_printk(K_DEBUG, "xhci_eint_iddig_isr\n");
+	/* disable_irq_nosync(irqnum);*/
+
 	return IRQ_HANDLED;
 }
 
+static int mtk_xhci_eint_iddig_irq_en(void)
+{
+	int retval = 0;
+
+	if (!otg_iddig_isr_enable) {
+		retval =
+			request_irq(mtk_idpin_irqnum, xhci_eint_iddig_isr, IRQF_TRIGGER_LOW, "iddig_eint",
+			NULL);
+
+		if (retval != 0) {
+			mtk_xhci_mtk_printk(K_ERR, "request_irq fail, ret %d, irqnum %d!!!\n", retval,
+					 mtk_idpin_irqnum);
+		} else {
+			enable_irq_wake(mtk_idpin_irqnum);
+			otg_iddig_isr_enable = true;
+		}
+	} else {
+#ifdef CONFIG_USB_MTK_OTG_SWITCH
+		switch_int_to_host();	/* restore ID pin interrupt */
+#endif
+	}
+	return retval;
+}
+
+
 int mtk_xhci_eint_iddig_init(void)
 {
-	int retval;
+	int retval = 0;
 	struct device_node *node;
 	int iddig_gpio, iddig_debounce;
 	u32 ints[2] = {0, 0};
@@ -628,11 +839,11 @@ int mtk_xhci_eint_iddig_init(void)
 				iddig_gpio = ints[0];
 				iddig_debounce = ints[1];
 				mtk_idpin_irqnum = irq_of_parse_and_map(node, 0);
-			   mtk_xhci_mtk_log("iddig gpio num = %d\n", mtk_idpin_irqnum);
+			   mtk_xhci_mtk_printk(K_DEBUG, "iddig gpio num = %d\n", mtk_idpin_irqnum);
 			}
 		}
 	} else {
-		mtk_xhci_mtk_log("cannot get the node\n");
+		mtk_xhci_mtk_printk(K_ERR, "cannot get the node\n");
 		return -ENODEV;
 	}
 
@@ -645,27 +856,22 @@ int mtk_xhci_eint_iddig_init(void)
 
 	/* microseconds */
 /*	mt_gpio_set_debounce(iddig_gpio, iddig_debounce);*/
+#ifndef CONFIG_USB_MTK_OTG_SWITCH
+	retval = mtk_xhci_eint_iddig_irq_en();
+#endif
 
-	retval =
-		request_irq(mtk_idpin_irqnum, xhci_eint_iddig_isr, IRQF_TRIGGER_LOW, "iddig_eint",
-			NULL);
-	if (retval != 0) {
-		mtk_xhci_mtk_log("request_irq fail, ret %d, irqnum %d!!!\n", retval,
-				 mtk_idpin_irqnum);
-		return retval;
-	}
-
-	/* set in-detect and umask the iddig interrupt */
-	/* enable_irq(mtk_idpin_irqnum); */
 	return retval;
 }
 
 void mtk_xhci_eint_iddig_deinit(void)
 {
-	/* mt_eint_registration(IDDIG_EINT_PIN, EINTF_TRIGGER_LOW, NULL, false); */
-	disable_irq_nosync(mtk_idpin_irqnum);
+	if (otg_iddig_isr_enable) {
+		/* mt_eint_registration(IDDIG_EINT_PIN, EINTF_TRIGGER_LOW, NULL, false); */
+		disable_irq_nosync(mtk_idpin_irqnum);
 
-	free_irq(mtk_idpin_irqnum, NULL);
+		free_irq(mtk_idpin_irqnum, NULL);
+		otg_iddig_isr_enable = false;
+	}
 
 	cancel_delayed_work(&mtk_xhci_delaywork);
 #ifdef CONFIG_MTK_OTG_PMIC_BOOST_5V
@@ -676,7 +882,7 @@ void mtk_xhci_eint_iddig_deinit(void)
 
 	mtk_idpin_cur_stat = IDPIN_OUT;
 
-	mtk_xhci_mtk_log("external iddig unregister done.\n");
+	mtk_xhci_mtk_printk(K_DEBUG, "external iddig unregister done.\n");
 }
 
 void mtk_set_host_mode_in_host(void)
@@ -691,9 +897,14 @@ void mtk_set_host_mode_out(void)
 
 bool mtk_is_host_mode(void)
 {
+#ifdef CONFIG_TCPC_CLASS
+	return tcpc_boost_on;
+#else
 	return (vbus_on > 0 || mtk_idpin_cur_stat == IDPIN_IN_HOST) ? true : false;
+#endif /* CONFIG_TCPC_CLASS */
 }
 
+#ifdef NEVER//CONFIG_USB_MTK_OTG_SWITCH
 void mtk_unload_xhci_on_ipo(void)
 {
 	mtk_xhci_disPortPower();
@@ -705,23 +916,139 @@ void mtk_unload_xhci_on_ipo(void)
 	mtk_idpin_cur_stat = IDPIN_OUT;
 }
 
+static ssize_t otg_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	if (!dev) {
+		dev_err(dev, "otg_mode_store no dev\n");
+		return 0;
+	}
+
+	return sprintf(buf, "%d\n", otg_switch_state);
+}
+
+static ssize_t otg_mode_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
+{
+	unsigned int mode;
+
+	if (!dev) {
+		dev_err(dev, "otg_mode_store no dev\n");
+		return count;
+	}
+
+	mutex_lock(&otg_switch_mutex);
+	if (1 == sscanf(buf, "%ud", &mode)) {
+		if (mode == 0) {
+			mtk_xhci_mtk_printk(K_DEBUG, "otg_mode_enable start\n");
+			if (otg_switch_state == true) {
+				if (otg_iddig_isr_enable) {
+					disable_irq(mtk_idpin_irqnum);
+					irq_set_irq_type(mtk_idpin_irqnum, IRQF_TRIGGER_LOW);
+				}
+				cancel_delayed_work_sync(&mtk_xhci_delaywork);
+				if (mtk_is_host_mode() == true)
+					mtk_unload_xhci_on_ipo();
+
+				if (!IS_ERR(pinctrl_iddig_disable))
+					pinctrl_select_state(pinctrl, pinctrl_iddig_disable);
+
+				otg_switch_state = false;
+			}
+			mtk_xhci_mtk_printk(K_DEBUG, "otg_mode_enable end\n");
+		} else {
+			mtk_xhci_mtk_printk(K_DEBUG, "otg_mode_disable start\n");
+			if (otg_switch_state == false) {
+				otg_switch_state = true;
+				if (!IS_ERR(pinctrl_iddig_enable))
+					pinctrl_select_state(pinctrl, pinctrl_iddig_enable);
+
+				msleep(20);
+				mtk_xhci_eint_iddig_irq_en();
+			}
+			mtk_xhci_mtk_printk(K_DEBUG, "otg_mode_disable end\n");
+		}
+	}
+	mutex_unlock(&otg_switch_mutex);
+	return count;
+}
+
+static int otg_switch_probe(struct platform_device *pdev)
+{
+	int retval = 0;
+
+	pinctrl = devm_pinctrl_get(&pdev->dev);
+	if (IS_ERR(pinctrl)) {
+		dev_err(&pdev->dev, "Cannot find usb pinctrl!\n");
+		return -1;
+	}
+
+	pinctrl_iddig_init = pinctrl_lookup_state(pinctrl, "iddig_init");
+	if (IS_ERR(pinctrl_iddig_init))
+		dev_err(&pdev->dev, "Cannot find usb pinctrl iddig_init\n");
+	else
+		pinctrl_select_state(pinctrl, pinctrl_iddig_init);
+
+	pinctrl_iddig_enable = pinctrl_lookup_state(pinctrl, "iddig_enable");
+	pinctrl_iddig_disable = pinctrl_lookup_state(pinctrl, "iddig_disable");
+	if (IS_ERR(pinctrl_iddig_enable))
+		dev_err(&pdev->dev, "Cannot find usb pinctrl iddig_enable\n");
+
+	if (IS_ERR(pinctrl_iddig_disable))
+		dev_err(&pdev->dev, "Cannot find usb pinctrl iddig_disable\n");
+	else
+		pinctrl_select_state(pinctrl, pinctrl_iddig_disable);
+
+#ifdef CONFIG_SYSFS
+	retval = sysfs_create_group(&pdev->dev.kobj, &otg_attr_group);
+	if (retval < 0) {
+		dev_err(&pdev->dev, "Cannot register USB bus sysfs attributes: %d\n",
+			retval);
+		return -1;
+	}
+#endif
+	mutex_init(&otg_switch_mutex);
+	return 0;
+}
+
+static int otg_switch_remove(struct platform_device *pdev)
+{
+#ifdef CONFIG_SYSFS
+		sysfs_remove_group(&pdev->dev.kobj, &otg_attr_group);
+#endif
+	return 0;
+}
+
+
+static struct platform_driver otg_switch_driver = {
+	.probe = otg_switch_probe,
+	.remove = otg_switch_remove,
+	.driver = {
+		.name = "otg_switch",
+		.owner = THIS_MODULE,
+		.of_match_table = of_match_ptr(otg_switch_of_match),
+	},
+};
+#endif
 
 #endif
 
 #ifdef CONFIG_USB_C_SWITCH
-static void typec_otg_enable(void)
+#ifndef CONFIG_TCPC_CLASS
+static int typec_otg_enable(void *data)
 {
-	mtk_idpin_cur_stat = IDPIN_IN_HOST;
 	int ret = 0;
+
+	mtk_idpin_cur_stat = IDPIN_IN_HOST;
 
 	ret = mtk_xhci_driver_load();
 	if (!ret) {
 		mtk_xhci_wakelock_lock();
 		switch_set_state(&mtk_otg_state, 1);
 	}
+	return ret;
 }
 
-static void typec_otg_disable(void)
+static int typec_otg_disable(void *data)
 {
 	mtk_xhci_disPortPower();
 	/* USB PLL Force settings */
@@ -730,13 +1057,17 @@ static void typec_otg_disable(void)
 	switch_set_state(&mtk_otg_state, 0);
 	mtk_xhci_wakelock_unlock();
 	mtk_idpin_cur_stat = IDPIN_OUT;
+
+	return 0;
 }
+
 static struct typec_switch_data typec_host_driver = {
 	.name = "xhci-mtk",
 	.type = HOST_TYPE,
 	.enable = typec_otg_enable,
 	.disable = typec_otg_disable,
 };
+#endif /* if not CONFIG_TCPC_CLASS */
 #endif
 
 
@@ -744,8 +1075,10 @@ void mtk_xhci_wakelock_init(void)
 {
 	wake_lock_init(&mtk_xhci_wakelock, WAKE_LOCK_SUSPEND, "xhci.wakelock");
 #ifdef CONFIG_USB_C_SWITCH
+#ifndef CONFIG_TCPC_CLASS
 	typec_host_driver.priv_data = NULL;
 	register_typec_switch_callback(&typec_host_driver);
+#endif /* if not CONFIG_TCPC_CLASS */
 #endif
 }
 
@@ -753,53 +1086,53 @@ void mtk_xhci_wakelock_lock(void)
 {
 	if (!wake_lock_active(&mtk_xhci_wakelock))
 		wake_lock(&mtk_xhci_wakelock);
-	mtk_xhci_mtk_log("done\n");
+	mtk_xhci_mtk_printk(K_DEBUG, "xhci_wakelock_lock done\n");
 }
 
 void mtk_xhci_wakelock_unlock(void)
 {
 	if (wake_lock_active(&mtk_xhci_wakelock))
 		wake_unlock(&mtk_xhci_wakelock);
-	mtk_xhci_mtk_log("done\n");
+	mtk_xhci_mtk_printk(K_DEBUG, "xhci_wakelock_unlock done\n");
 }
 
-void mtk_xhci_set(struct usb_hcd *hcd, struct xhci_hcd *xhci)
+int mtk_xhci_set(struct usb_hcd *hcd, struct xhci_hcd *xhci)
 {
 	struct platform_device *pdev = to_platform_device(hcd->self.controller);
-	struct resource *sif_res, *sif2_res;
+	struct resource *sif_res;
 
 	xhci->base_regs = (unsigned long)hcd->regs;
 
 	sif_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, XHCI_SIF_REGS_ADDR_RES_NAME);
-	if (!sif_res)
+	if (!sif_res) {
 		pr_err("%s(%d): cannot get sif resources\n", __func__, __LINE__);
+		return -ENXIO;
+	}
 
+	xhci->sif_regs = (unsigned long)ioremap(sif_res->start,
+						resource_size(sif_res));
+	if (!xhci->sif_regs) {
+		pr_err("xhci->sif_regs map fail\n");
+		return -ENOMEM;
+	}
+	mtk_xhci_mtk_printk(K_DEBUG, "%s(%d): sif_base, logic 0x%p, phys 0x%p\n",
+			__func__, __LINE__,
+			(void *)(unsigned long)sif_res->start,
+			(void *)xhci->sif_regs);
 
-	xhci->sif_regs = (unsigned long)ioremap(sif_res->start, resource_size(sif_res));
-
-	mtk_xhci_mtk_log("%s(%d): sif_base, logic 0x%p, phys 0x%p\n", __func__, __LINE__,
-		   (void *)(unsigned long)sif_res->start, (void *)xhci->sif_regs);
-
-	sif2_res = platform_get_resource_byname(pdev, IORESOURCE_MEM, XHCI_SIF2_REGS_ADDR_RES_NAME);
-	if (!sif2_res)
-		pr_err("%s(%d): cannot get sif2 resources\n", __func__, __LINE__);
-
-
-	xhci->sif2_regs = (unsigned long)ioremap(sif2_res->start, resource_size(sif2_res));
-
-	mtk_xhci_mtk_log("%s(%d): sif2_base, logic 0x%p, phys 0x%p\n", __func__, __LINE__,
-		   (void *)(unsigned long)sif2_res->start, (void *)xhci->sif2_regs);
-
-	mtk_xhci_mtk_log("mtk_xhci = 0x%p\n", xhci);
+	mtk_xhci_mtk_printk(K_DEBUG, "mtk_xhci = 0x%p\n", xhci);
 	mtk_xhci = xhci;
+	return 0;
 }
 
 void mtk_xhci_reset(struct xhci_hcd *xhci)
 {
-	iounmap((void __iomem *)xhci->sif_regs);
-	mtk_xhci_mtk_log("iounmap, sif_reg, 0x%p\n", (void *)xhci->sif_regs);
-	iounmap((void __iomem *)xhci->sif2_regs);
-	mtk_xhci_mtk_log("iounmap, sif2_reg, 0x%p\n", (void *)xhci->sif2_regs);
+	if (xhci) {
+		if (xhci->sif_regs) {
+			iounmap((void __iomem *)xhci->sif_regs);
+			mtk_xhci_mtk_printk(K_DEBUG, "iounmap, sif_reg, 0x%p\n", (void *)xhci->sif_regs);
+		}
+	}
 	mtk_xhci = NULL;
 }
 
@@ -813,7 +1146,7 @@ void mtk_xhci_ck_timer_init(struct xhci_hcd *xhci)
 	unsigned int hw_code = mt_get_chip_hw_code();
 	CHIP_SW_VER sw_code = mt_get_chip_sw_ver();
 
-	mtk_xhci_mtk_log("hw code(0x%x), sw_code(0x%x)\n", hw_code, sw_code);
+	mtk_xhci_mtk_printk(K_DEBUG, "hw code(0x%x), sw_code(0x%x)\n", hw_code, sw_code);
 
 	if (0x6595 == hw_code) {
 		/* The sys125_ck = 1/2 sys_ck = 62.5MHz */
@@ -821,7 +1154,7 @@ void mtk_xhci_ck_timer_init(struct xhci_hcd *xhci)
 		temp = readl(addr);
 		temp |= SSUSB_SYS_CK_DIV2_EN;
 		writel(temp, addr);
-		mtk_xhci_mtk_log("mu3d sys_clk, addr 0x%p, value 0x%x\n",
+		mtk_xhci_mtk_printk(K_DEBUG, "mu3d sys_clk, addr 0x%p, value 0x%x\n",
 				 (void *)_SSUSB_SYS_CK_CTRL(xhci->sif_regs),
 				 readl((__u32 __iomem *) _SSUSB_SYS_CK_CTRL(xhci->sif_regs)));
 
@@ -862,7 +1195,7 @@ void mtk_xhci_ck_timer_init(struct xhci_hcd *xhci)
 		temp |= MTK_TIME_VALUE_1US;
 		writel(temp, addr);
 
-		mtk_xhci_mtk_log("mu3d u2 mac sys_clk, addr 0x%p, value 0x%x\n",
+		mtk_xhci_mtk_printk(K_DEBUG, "mu3d u2 mac sys_clk, addr 0x%p, value 0x%x\n",
 				 (void *)(_SSUSB_U2_SYS_BASE(xhci->base_regs) +
 					  USB20_TIMING_PARAMETER),
 				 readl((void __iomem *)(_SSUSB_U2_SYS_BASE(xhci->base_regs) +
@@ -909,20 +1242,24 @@ static int mtk_xhci_phy_init(int argc, char **argv)
 	if (u3phy_ops->u2_slew_rate_calibration)
 		u3phy_ops->u2_slew_rate_calibration(u3phy);
 	else
-		mtk_xhci_mtk_log("WARN: PHY doesn't implement u2 slew rate calibration function\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "WARN: PHY doesn't implement u2 slew rate calibration function\n");
 
 	/* phy initialization */
 	if (u3phy_ops->init(u3phy) != PHY_TRUE)
 		return RET_FAIL;
 
-	mtk_xhci_mtk_log("phy registers and operations initial done\n");
+	mtk_xhci_mtk_printk(K_DEBUG, "phy registers and operations initial done\n");
 	return RET_SUCCESS;
 }
 #endif
 
 int mtk_xhci_ip_init(struct usb_hcd *hcd, struct xhci_hcd *xhci)
 {
-	mtk_xhci_set(hcd, xhci);
+	int retval;
+
+	retval = mtk_xhci_set(hcd, xhci);
+	if (retval)
+		goto error;
 
 #ifdef CONFIG_MTK_FPGA
 	u3_base = (void __iomem *)xhci->base_regs;
@@ -932,7 +1269,7 @@ int mtk_xhci_ip_init(struct usb_hcd *hcd, struct xhci_hcd *xhci)
 	if (!(i2c1_base))
 		pr_err("Can't remap I2C1 BASE\n");
 
-	mtk_xhci_mtk_log("%s(%d): i2c1_base, logic x%x, phys 0x%p\n", __func__, __LINE__, 0x11008000,
+	mtk_xhci_mtk_printk(K_DEBUG, "%s(%d): i2c1_base, logic x%x, phys 0x%p\n", __func__, __LINE__, 0x11008000,
 		   (void *)i2c1_base);
 #endif
 
@@ -949,6 +1286,9 @@ int mtk_xhci_ip_init(struct usb_hcd *hcd, struct xhci_hcd *xhci)
 	mtk_xhci_ck_timer_init(xhci);
 
 	return 0;
+
+error:
+	return retval;
 }
 
 #if 0
@@ -967,7 +1307,7 @@ static int xhci_hcd_driver_init(void)
 
 	retval = xhci_register_pci();
 	if (retval < 0) {
-		mtk_xhci_mtk_log(KERN_DEBUG "Problem registering PCI driver.");
+		mtk_xhci_mtk_printk(K_DEBUG, "Problem registering PCI driver.");
 		return retval;
 	}
 
@@ -977,14 +1317,14 @@ static int xhci_hcd_driver_init(void)
 
 	retval = xhci_register_plat();
 	if (retval < 0) {
-		mtk_xhci_mtk_log(KERN_DEBUG "Problem registering platform driver.");
+		mtk_xhci_mtk_printk(K_DEBUG, "Problem registering platform driver.");
 		goto unreg_pci;
 	}
 
 	#ifdef CONFIG_USB_XHCI_MTK
 	retval = xhci_attrs_init();
 	if (retval < 0) {
-		mtk_xhci_mtk_log(KERN_DEBUG "Problem creating xhci attributes.");
+		mtk_xhci_mtk_printk(K_DEBUG, "Problem creating xhci attributes.");
 		goto unreg_plat;
 	}
 
@@ -1057,12 +1397,10 @@ static int xhci_mu3h_proc_open(struct inode *inode, struct file *file)
 
 static ssize_t xhci_mu3h_proc_write(struct file *file, const char __user *buf, size_t length, loff_t *ppos)
 {
-	int ret;
 	char msg[32];
-	int result;
 
 	if (length >= sizeof(msg)) {
-		mtk_xhci_mtk_log("xhci_mu3h_proc_write length error, the error len is %d\n", (unsigned int)length);
+		mtk_xhci_mtk_printk(K_DEBUG, "write length error, the error len is %d\n", (unsigned int)length);
 		return -EINVAL;
 	}
 	if (copy_from_user(msg, buf, length))
@@ -1070,18 +1408,18 @@ static ssize_t xhci_mu3h_proc_write(struct file *file, const char __user *buf, s
 
 	msg[length] = 0;
 
-	mtk_xhci_mtk_log("xhci_mu3h_proc_write: %s, current driver on/off: %d\n", msg, mu3h_normal_driver_on);
+	mtk_xhci_mtk_printk(K_DEBUG, "proc_write: %s, current driver on/off: %d\n", msg, mu3h_normal_driver_on);
 
 	if ((msg[0] == '1') && (mu3h_normal_driver_on == 0)) {
 		xhci_hcd_driver_init();
 		mu3h_normal_driver_on = 1;
-		mtk_xhci_mtk_log("registe mu3h driver : m3h xhci driver\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "registe mu3h driver : m3h xhci driver\n");
 	} else if ((msg[0] == '0') && (mu3h_normal_driver_on == 1)) {
 		xhci_hcd_driver_cleanup();
 		mu3h_normal_driver_on = 0;
-		mtk_xhci_mtk_log("unregiste m3h xhci driver.\n");
-	else
-		mtk_xhci_mtk_log("xhci_mu3h_proc_write write faile !\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "unregiste m3h xhci driver.\n");
+	} else
+		mtk_xhci_mtk_printk(K_DEBUG, "xhci_mu3h_proc_write write faile !\n");
 
 	return length;
 }
@@ -1099,7 +1437,7 @@ static int __init xhci_hcd_init(void)
 {
 	struct proc_dir_entry *prEntry;
 
-	mtk_xhci_mtk_log(KERN_DEBUG "xhci_hcd_init");
+	mtk_xhci_mtk_printk(K_DEBUG, "xhci_hcd_init");
 	/* set xhci up at boot up*/
 	xhci_hcd_driver_init();
 	mtk_xhci_wakelock_init();
@@ -1107,33 +1445,49 @@ static int __init xhci_hcd_init(void)
 
 	/* USBIF */
 	prEntry = proc_create("mu3h_driver_init", 0666, NULL, &mu3h_proc_fops);
-	if (prEntry) {
-		mtk_xhci_mtk_log("create the mu3h init proc OK!\n");
+	if (prEntry)
+		mtk_xhci_mtk_printk(K_DEBUG, "create the mu3h init proc OK!\n");
 	else
-		mtk_xhci_mtk_log("[ERROR] create the mu3h init proc FAIL\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "[ERROR] create the mu3h init proc FAIL\n");
 
-#ifdef CONFIG_USB_XHCI_MTK
+#if 0
 
 	if (!misc_register(&mu3h_uevent_device))
-		mtk_xhci_mtk_log("create the mu3h_uevent_device uevent device OK!\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "create the mu3h_uevent_device uevent device OK!\n");
 	else
-		mtk_xhci_mtk_log("[ERROR] create the mu3h_uevent_device uevent device fail\n");
+		mtk_xhci_mtk_printk(K_DEBUG, "[ERROR] create the mu3h_uevent_device uevent device fail\n");
 
 #endif
 
 	return 0;
 
 }
-module_init(xhci_hcd_init);
-
+late_initcall(xhci_hcd_init);
 static void __exit xhci_hcd_cleanup(void)
 {
-#ifdef CONFIG_USB_XHCI_MTK
+#if 0
 	misc_deregister(&mu3h_uevent_device);
 #endif
-	mtk_xhci_mtk_log(KERN_DEBUG "xhci_hcd_cleanup");
+	mtk_xhci_mtk_printk(K_DEBUG, "xhci_hcd_cleanup");
 }
+
 module_exit(xhci_hcd_cleanup);
+
+#ifdef CONFIG_USB_MTK_OTG_SWITCH
+static int __init otg_switch_init(void)
+{
+	return platform_driver_register(&otg_switch_driver);
+}
+module_init(otg_switch_init);
+
+static void __exit otg_iddit_cleanup(void)
+{
+	platform_driver_unregister(&otg_switch_driver);
+}
+
+module_exit(otg_iddit_cleanup);
+#endif
+
 
 #else
 #ifndef CONFIG_USB_MTK_DUALMODE
@@ -1143,18 +1497,18 @@ static int __init xhci_hcd_init(void)
 
 	retval = xhci_register_pci();
 	if (retval < 0) {
-		mtk_xhci_mtk_log("Problem registering PCI driver.");
+		mtk_xhci_mtk_printk(K_DEBUG, "Problem registering PCI driver.");
 		return retval;
 	}
 	retval = xhci_register_plat();
 	if (retval < 0) {
-		mtk_xhci_mtk_log("Problem registering platform driver.");
+		mtk_xhci_mtk_printk(K_DEBUG, "Problem registering platform driver.");
 		goto unreg_pci;
 	}
 
 	retval = xhci_attrs_init();
 	if (retval < 0) {
-		mtk_xhci_mtk_log("Problem creating xhci attributes.");
+		mtk_xhci_mtk_printk(K_DEBUG, "Problem creating xhci attributes.");
 		goto unreg_plat;
 	}
 
@@ -1199,18 +1553,57 @@ module_exit(xhci_hcd_cleanup);
 #else /*CONFIG_USB_MTK_DUALMODE*/
 static int __init xhci_hcd_init(void)
 {
+#ifdef CONFIG_TCPC_CLASS
+	int ret;
+#endif /* CONFIG_TCPC_CLASS */
+
 	mtk_xhci_eint_iddig_init();
 	mtk_xhci_switch_init();
 	mtk_xhci_wakelock_init();
+#ifdef CONFIG_TCPC_CLASS
+	mutex_init(&tcpc_otg_lock);
+	mutex_init(&tcpc_otg_pwr_lock);
+	otg_tcpc_workq = create_singlethread_workqueue("tcpc_otg_workq");
+	otg_tcpc_power_workq = create_singlethread_workqueue("tcpc_otg_power_workq");
+	INIT_WORK(&tcpc_otg_power_work, tcpc_otg_power_work_call);
+	INIT_WORK(&tcpc_otg_work, tcpc_otg_work_call);
+	otg_tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
+	if (!otg_tcpc_dev) {
+		pr_err("%s get tcpc device type_c_port0 fail\n", __func__);
+		return -ENODEV;
+	}
+
+	otg_nb.notifier_call = otg_tcp_notifier_call;
+	ret = register_tcp_dev_notifier(otg_tcpc_dev, &otg_nb);
+	if (ret < 0) {
+		pr_err("%s register tcpc notifer fail\n", __func__);
+		return -EINVAL;
+	}
+#endif /* CONFIG_TCPC_CLASS */
 	return 0;
 }
+
 late_initcall(xhci_hcd_init);
 
 static void __exit xhci_hcd_cleanup(void)
 {
 }
-module_exit(xhci_hcd_cleanup);
 
+module_exit(xhci_hcd_cleanup);
+#ifdef CONFIG_USB_MTK_OTG_SWITCH
+static int __init otg_switch_init(void)
+{
+	return platform_driver_register(&otg_switch_driver);
+}
+module_init(otg_switch_init);
+
+static void __exit otg_iddit_cleanup(void)
+{
+	platform_driver_unregister(&otg_switch_driver);
+}
+
+module_exit(otg_iddit_cleanup);
+#endif
 #endif
 #endif
 

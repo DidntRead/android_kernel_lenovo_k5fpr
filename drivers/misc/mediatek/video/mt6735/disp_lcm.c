@@ -1228,8 +1228,30 @@ int disp_lcm_set_backlight(disp_lcm_handle *plcm, int level)
 	return -1;
 }
 
-
-
+int disp_lcm_set_cabc(disp_lcm_handle *plcm, unsigned int mode)
+{
+	DISPFUNC();
+	
+	if(_is_lcm_inited(plcm))
+	{
+		if(plcm->drv->set_cabcmode)
+		{
+			plcm->drv->set_cabcmode(mode);
+		}
+		else
+		{
+			DISPERR("FATAL ERROR, lcm_drv->set_cabcmode is null\n");
+			return -1;
+		}
+		
+		return 0;
+	}
+	else
+	{
+		DISPERR("lcm_drv is null\n");
+		return -1;
+	}
+}
 
 int disp_lcm_ioctl(disp_lcm_handle *plcm, LCM_IOCTL ioctl, unsigned int arg)
 {

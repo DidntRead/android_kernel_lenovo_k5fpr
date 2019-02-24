@@ -347,6 +347,7 @@ int primary_display_insert_session_buf(disp_session_buf_info *session_buf_info);
 int primary_display_enable_path_cg(int enable);
 int primary_display_lcm_ATA(void);
 int primary_display_setbacklight(unsigned int level);
+int primary_display_setcabc(unsigned int mode);
 int fbconfig_get_esd_check_test(uint32_t dsi_id, uint32_t cmd, uint8_t *buffer, uint32_t num);
 int primary_display_pause(PRIMARY_DISPLAY_CALLBACK callback, unsigned int user_data);
 int primary_display_switch_dst_mode(int mode);

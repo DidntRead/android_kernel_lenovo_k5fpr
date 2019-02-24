@@ -50,7 +50,7 @@ static ssize_t sdcardfs_read(struct file *file, char __user *buf,
 	err = vfs_read(lower_file, buf, count, ppos);
 	/* update our inode atime upon a successful lower read */
 	if (err >= 0)
-		fsstack_copy_attr_atime(dentry->d_inode,
+		fsstack_copy_attr_atime(d_inode(dentry),
 					file_inode(lower_file));
 
 	return err;
@@ -62,7 +62,7 @@ static ssize_t sdcardfs_write(struct file *file, const char __user *buf,
 	int err;
 	struct file *lower_file;
 	struct dentry *dentry = file->f_path.dentry;
-	struct inode *inode = dentry->d_inode;
+	struct inode *inode = d_inode(dentry);
 
 	/* check disk space */
 	if (!check_min_free_space(dentry, count, 0)) {
@@ -97,7 +97,7 @@ static int sdcardfs_readdir(struct file *file, struct dir_context *ctx)
 	err = iterate_dir(lower_file, ctx);
 	file->f_pos = lower_file->f_pos;
 	if (err >= 0)		/* copy the atime */
-		fsstack_copy_attr_atime(dentry->d_inode,
+		fsstack_copy_attr_atime(d_inode(dentry),
 					file_inode(lower_file));
 	return err;
 }
@@ -243,7 +243,7 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 		goto out_err;
 	}
 
-	if (!check_caller_access_to_name(parent->d_inode, &dentry->d_name)) {
+	if (!check_caller_access_to_name(d_inode(parent), &dentry->d_name)) {
 		err = -EACCES;
 		goto out_err;
 	}

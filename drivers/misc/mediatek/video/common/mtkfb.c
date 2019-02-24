@@ -1616,11 +1616,80 @@ static struct fb_ops mtkfb_ops = {
  * Sysfs interface
  * ---------------------------------------------------------------------------
  */
-static int mtkfb_register_sysfs(struct mtkfb_device *fbdev)
-{
-	/* NOT_REFERENCED(fbdev); */
 
-	return 0;
+static int cabc_level = 1;
+static bool cabc_enabled = false;
+
+static ssize_t mtkfb_get_cabc(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", cabc_enabled ? 1 : 0);
+}
+
+static ssize_t mtkfb_set_cabc(struct device *dev,
+							   struct device_attribute *attr,
+							   const char *buf, size_t count)
+{
+	int enabled = 0;
+
+	sscanf(buf, "%du", &enabled);
+	if (enabled == 1) {
+		cabc_enabled = true;
+	} else {
+		cabc_enabled = false;
+	}
+
+	primary_display_setcabc(cabc_enabled ? cabc_level : 0);
+
+	return count;
+}
+
+static ssize_t mtkfb_get_cabc_mode(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", cabc_level);
+}
+
+static ssize_t mtkfb_set_cabc_mode(struct device *dev,
+							   struct device_attribute *attr,
+							   const char *buf, size_t count)
+{
+	int level = 0;
+
+	sscanf(buf, "%du", &level);
+	if (level >= 1 && level <= 3 &&
+				level != cabc_level) {
+		cabc_level = level;
+		if (cabc_enabled) {
+			primary_display_setcabc(cabc_level);
+		}
+	}
+
+	return count;
+}
+
+static DEVICE_ATTR(cabc, S_IRUGO | S_IWUSR | S_IWGRP, mtkfb_get_cabc, mtkfb_set_cabc);
+static DEVICE_ATTR(cabc_mode, S_IRUGO | S_IWUSR | S_IWGRP, mtkfb_get_cabc_mode, mtkfb_set_cabc_mode);
+
+static int mtkfb_register_sysfs(struct mtkfb_device *fbdev, bool fb_ready)
+{
+	int rc = 0;
+
+	if (fb_ready) {
+		rc = sysfs_create_file(&fbdev->fb_info->dev->kobj, &dev_attr_cabc.attr);
+		if (rc)
+			goto sysfs_err;
+
+		rc = sysfs_create_file(&fbdev->fb_info->dev->kobj, &dev_attr_cabc_mode.attr);
+		if (rc)
+			goto sysfs_err;
+
+	}
+	return rc;
+
+sysfs_err:
+	pr_err("%s: sysfs creation failed, rc=%d", __func__, rc);
+	return rc;
 }
 
 static void mtkfb_unregister_sysfs(struct mtkfb_device *fbdev)
@@ -2377,7 +2446,7 @@ static int mtkfb_probe(struct device *dev)
 		_mtkfb_internal_test((unsigned long)(fbdev->fb_va_base), MTK_FB_XRES, MTK_FB_YRES);
 
 
-	r = mtkfb_register_sysfs(fbdev);
+	r = mtkfb_register_sysfs(fbdev, false);
 	if (r) {
 		DISPERR("mtkfb_register_sysfs fail, r = %d\n", r);
 		goto cleanup;
@@ -2387,6 +2456,12 @@ static int mtkfb_probe(struct device *dev)
 	r = register_framebuffer(fbi);
 	if (r != 0) {
 		DISPERR("register_framebuffer failed\n");
+		goto cleanup;
+	}
+
+	r = mtkfb_register_sysfs(fbdev, true);
+	if (r) {
+		DISPERR("mtkfb_register_sysfs fail, r = %d\n", r);
 		goto cleanup;
 	}
 

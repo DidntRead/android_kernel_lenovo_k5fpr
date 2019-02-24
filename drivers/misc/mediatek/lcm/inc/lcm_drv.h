@@ -823,9 +823,9 @@ typedef struct {
 			     unsigned int *lcm_value);
 	/* /////////////PWM///////////////////////////// */
 	void (*set_pwm_for_mix)(int enable);
+	void (*set_cabcmode)(unsigned int mode);
 //lenovo wuwl10 20150604 add CUSTOM_LCM_FEATURE begin
 #ifdef CONFIG_LENOVO_CUSTOM_LCM_FEATURE
-    void (*set_cabcmode)(unsigned int mode);
     void (*get_cabcmode)(unsigned int * mode);
     void (*set_inversemode)(unsigned int mode);
     void (*get_inversemode)(unsigned int * mode);
