@@ -22,7 +22,6 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/parser.h>
-#include <linux/xattr.h>
 
 enum {
 	Opt_fsuid,
@@ -67,8 +66,8 @@ static int parse_options(struct super_block *sb, char *options, int silent,
 	opts->multiuser = false;
 	opts->fs_user_id = 0;
 	vfsopts->gid = 0;
-	/* by default, 8 MB is reserved */
-	opts->reserved_mb = 8;
+	/* by default, 0MB is reserved */
+	opts->reserved_mb = 0;
 	/* by default, gid derivation is off */
 	opts->gid_derivation = false;
 	opts->default_normal = false;
@@ -265,7 +264,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 
 	pr_info("sdcardfs: dev_name -> %s\n", dev_name);
 	pr_info("sdcardfs: options -> %s\n", (char *)raw_data);
-	pr_info("sdcardfs: mnt -> %p\n", mnt);
+	pr_info("sdcardfs: mnt -> %pK\n", mnt);
 
 	/* parse lower path */
 	err = kern_path(dev_name, LOOKUP_FOLLOW | LOOKUP_DIRECTORY,
@@ -316,7 +315,7 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	sb->s_op = &sdcardfs_sops;
 
 	/* get a new inode and allocate our root dentry */
-	inode = sdcardfs_iget(sb, d_inode(lower_path.dentry), 0);
+	inode = sdcardfs_iget(sb, lower_path.dentry->d_inode, 0);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out_sput;
@@ -348,15 +347,15 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	sb_info->obbpath_s = kzalloc(PATH_MAX, GFP_KERNEL);
 	mutex_lock(&sdcardfs_super_list_lock);
 	if (sb_info->options.multiuser) {
-		setup_derived_state(d_inode(sb->s_root), PERM_PRE_ROOT,
+		setup_derived_state(sb->s_root->d_inode, PERM_PRE_ROOT,
 				sb_info->options.fs_user_id, AID_ROOT);
 		snprintf(sb_info->obbpath_s, PATH_MAX, "%s/obb", dev_name);
 	} else {
-		setup_derived_state(d_inode(sb->s_root), PERM_ROOT,
+		setup_derived_state(sb->s_root->d_inode, PERM_ROOT,
 				sb_info->options.fs_user_id, AID_ROOT);
 		snprintf(sb_info->obbpath_s, PATH_MAX, "%s/Android/obb", dev_name);
 	}
-	fixup_tmp_permissions(d_inode(sb->s_root));
+	fixup_tmp_permissions(sb->s_root->d_inode);
 	sb_info->sb = sb;
 	list_add(&sb_info->list, &sdcardfs_super_list);
 	mutex_unlock(&sdcardfs_super_list_lock);
@@ -364,26 +363,6 @@ static int sdcardfs_read_super(struct vfsmount *mnt, struct super_block *sb,
 	if (!silent)
 		pr_info("sdcardfs: mounted on top of %s type %s\n",
 				dev_name, lower_sb->s_type->name);
-
-#ifdef CONFIG_SDCARD_FS_DIR_WRITER
-	if (vfs_setxattr(lower_path.dentry,
-		SDCARDFS_XATTR_DWRITER_NAME,
-		CONFIG_SDCARD_FS_DIR_WRITER,
-		strlen(CONFIG_SDCARD_FS_DIR_WRITER), 0)) {
-		pr_warn("sdcardfs: failed to set %s\n",
-			SDCARDFS_XATTR_DWRITER_NAME);
-	}
-#endif
-#ifdef CONFIG_SDCARD_FS_PARTIAL_RELATIME
-	if (vfs_setxattr(lower_path.dentry,
-		SDCARDFS_XATTR_PARTIAL_RELATIME_NAME,
-		CONFIG_SDCARD_FS_PARTIAL_RELATIME,
-		strlen(CONFIG_SDCARD_FS_PARTIAL_RELATIME), 0)) {
-		pr_warn("sdcardfs: failed to set xattr %s\n",
-			SDCARDFS_XATTR_PARTIAL_RELATIME_NAME);
-	}
-#endif
-
 	goto out; /* all is well */
 
 	/* no longer needed: free_dentry_private_data(sb->s_root); */
