@@ -75,11 +75,11 @@ static ssize_t sdcardfs_write(struct file *file, const char __user *buf,
 	/* update our inode times+sizes upon a successful lower write */
 	if (err >= 0) {
 		if (sizeof(loff_t) > sizeof(long))
-			mutex_lock(&inode->i_mutex);
+			inode_lock(inode);
 		fsstack_copy_inode_size(inode, file_inode(lower_file));
 		fsstack_copy_attr_times(inode, file_inode(lower_file));
 		if (sizeof(loff_t) > sizeof(long))
-			mutex_unlock(&inode->i_mutex);
+			inode_unlock(inode);
 	}
 
 	return err;
@@ -159,6 +159,7 @@ static long sdcardfs_compat_ioctl(struct file *file, unsigned int cmd,
 		goto out;
 	}
 
+
 	if (lower_file->f_op->compat_ioctl)
 		err = lower_file->f_op->compat_ioctl(lower_file, cmd, arg);
 
@@ -236,6 +237,10 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 	struct dentry *parent = dget_parent(dentry);
 	struct sdcardfs_sb_info *sbi = SDCARDFS_SB(dentry->d_sb);
 	const struct cred *saved_cred = NULL;
+#if defined(CONFIG_SDCARD_FS_DIR_WRITER) || defined(CONFIG_SDCARD_FS_PARTIAL_RELATIME)
+	uid_t writer_uid = current_fsuid().val;
+	struct sdcardfs_inode_data *pd = SDCARDFS_I(d_inode(parent))->data;
+#endif
 
 	/* don't open unhashed/deleted files */
 	if (d_unhashed(dentry)) {
@@ -281,6 +286,19 @@ static int sdcardfs_open(struct inode *inode, struct file *file)
 		kfree(SDCARDFS_F(file));
 	else
 		sdcardfs_copy_and_fix_attrs(inode, sdcardfs_lower_inode(inode));
+
+#ifdef CONFIG_SDCARD_FS_PARTIAL_RELATIME
+	if (!err && pd->perm < PERM_ANDROID)
+		sdcardfs_update_relatime_flag(lower_file,
+			sdcardfs_lower_inode(inode), writer_uid);
+#endif
+#ifdef CONFIG_SDCARD_FS_DIR_WRITER
+	/* update xattr for writing operation under non "Android" folders */
+	if (!err && (lower_file->f_flags & O_ACCMODE) &&
+		pd->perm < PERM_ANDROID)
+		sdcardfs_update_xattr_dirwriter(lower_file->f_path.dentry,
+			writer_uid);
+#endif
 
 out_revert_cred:
 	revert_fsids(saved_cred);
@@ -422,11 +440,11 @@ ssize_t sdcardfs_write_iter(struct kiocb *iocb, struct iov_iter *iter)
 	/* update upper inode times/sizes as needed */
 	if (err >= 0 || err == -EIOCBQUEUED) {
 		if (sizeof(loff_t) > sizeof(long))
-			mutex_lock(&inode->i_mutex);
+			inode_lock(inode);
 		fsstack_copy_inode_size(inode, file_inode(lower_file));
 		fsstack_copy_attr_times(inode, file_inode(lower_file));
 		if (sizeof(loff_t) > sizeof(long))
-			mutex_unlock(&inode->i_mutex);
+			inode_unlock(inode);
 	}
 out:
 	return err;
