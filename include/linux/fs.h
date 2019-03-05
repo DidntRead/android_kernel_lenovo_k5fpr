@@ -1624,8 +1624,8 @@ struct super_operations {
 #define S_IMA		1024	/* Inode has an associated IMA struct */
 #define S_AUTOMOUNT	2048	/* Automount/referral quasi-directory */
 #define S_NOSEC		4096	/* no suid or xattr security attributes */
-#define S_ATOMIC_COPY	8192	/* Pages mapped with this inode need to be
-				   atomically copied (gem) */
+#define S_ATOMIC_COPY	8192	/* Pages mapped with this inode need to be atomically copied (gem) */
+#define S_RELATIME	(1 << 31)	/* Update relative access times */
 
 /*
  * Note that nosuid etc flags are inode-specific: setting some file-system
