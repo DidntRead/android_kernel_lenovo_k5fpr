@@ -182,7 +182,7 @@ int mtk_cfg80211_vendor_set_country_code(struct wiphy *wiphy, struct wireless_de
 	WLAN_STATUS rStatus;
 	UINT_32 u4BufLen;
 	struct nlattr *attr;
-	UINT_8 country[2];
+	UINT_8 country[2] = {0, 0};
 
 	ASSERT(wiphy && wdev);
 	if ((data == NULL) || (data_len == 0))
@@ -196,9 +196,13 @@ int mtk_cfg80211_vendor_set_country_code(struct wiphy *wiphy, struct wireless_de
 		country[1] = *((PUINT_8)nla_data(attr) + 1);
 	}
 
-	DBGLOG(REQ, INFO, "Set country code: %c%c\n", country[0], country[1]);
+	DBGLOG(REQ, INFO, "Set country code: %c%c, iftype=%d\n", country[0], country[1], wdev->iftype);
 
-	prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
+	if (wdev->iftype == NL80211_IFTYPE_AP)
+		prGlueInfo = *((P_GLUE_INFO_T *) wiphy_priv(wiphy));
+	else
+		prGlueInfo = (P_GLUE_INFO_T) wiphy_priv(wiphy);
+
 	if (!prGlueInfo)
 		return -EFAULT;
 
