@@ -1129,30 +1129,22 @@ static int LSM6DS3_acc_Enable_Func(struct i2c_client *client, LSM6DS3_ACC_GYRO_F
 #endif
 
 #ifdef LSM6DS3_STEP_COUNTER //step counter
-static int LSM6DS3_W_Open_RAM_Page(struct i2c_client *client, LSM6DS3_ACC_GYRO_RAM_PAGE_t newValue)
+static int LSM6DS3_enable_embedded_page_regs(struct i2c_client *client, bool enable)
 {
 	u8 databuf[2] = {0}; 
 	int res = 0;
 	GSE_FUN();    
 	
-	if(hwmsen_read_byte(client, LSM6DS3_RAM_ACCESS, databuf))
-	{
-		GSE_ERR("%s read LSM6DS3_RAM_ACCESS register err!\n", __func__);
-		return LSM6DS3_ERR_I2C;
-	}
-	else
-	{
-		GSE_LOG("%s read acc data format register: 0x%x\n", __func__, databuf[0]);
-	}
-	databuf[0] &= ~LSM6DS3_RAM_PAGE_MASK;//clear 
-	databuf[0] |= newValue;
+	databuf[0] = LSM6DS3_FUNC_CFG_ACCESS;
 	
-	databuf[1] = databuf[0];
-	databuf[0] = LSM6DS3_RAM_ACCESS; 	
+	if (enable) {
+		databuf[1] = LSM6DS3_FUNC_CFG_REG2_MASK;
+	}
+	
 	res = i2c_master_send(client, databuf, 0x2);
 	if(res <= 0)
 	{
-		GSE_ERR("%s write LSM6DS3_RAM_ACCESS register err!\n", __func__);
+		GSE_ERR("%s write LSM6DS3_FUNC_CFG_ACCESS register err!\n", __func__);
 		return LSM6DS3_ERR_I2C;
 	}
 
@@ -1165,7 +1157,7 @@ static int LSM6DS3_Write_PedoThreshold(struct i2c_client *client, u8 newValue)
 	int res = 0;
 	GSE_FUN();    
 	
-	res = LSM6DS3_W_Open_RAM_Page(client, LSM6DS3_ACC_GYRO_RAM_PAGE_ENABLED);
+	res = LSM6DS3_enable_embedded_page_regs(client, true);
 	if(LSM6DS3_SUCCESS != res)
 	{
 		return res;
@@ -1200,10 +1192,10 @@ static int LSM6DS3_Write_PedoThreshold(struct i2c_client *client, u8 newValue)
 		GSE_ERR("%s write LSM6DS3_CTRL10_C register err!\n", __func__);
 		return LSM6DS3_ERR_I2C;
 	}
-	res = LSM6DS3_W_Open_RAM_Page(client, LSM6DS3_ACC_GYRO_RAM_PAGE_DISABLED);
+	res = LSM6DS3_enable_embedded_page_regs(client, false);
 	if(LSM6DS3_SUCCESS != res)
 	{
-		GSE_ERR("%s write LSM6DS3_W_Open_RAM_Page failed!\n", __func__);
+		GSE_ERR("%s write LSM6DS3_enable_embedded_page_regs failed!\n", __func__);
 		return res;
 	}
 	

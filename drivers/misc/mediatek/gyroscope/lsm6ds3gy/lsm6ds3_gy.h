@@ -24,9 +24,7 @@
 
 
 /* LSM6DS3 Register Map  (Please refer to LSM6DS3 Specifications) */
-/*lenovo-sw caoyi1 modify 20150325 begin*/
-#define LSM6DS3_FUNC_CFG_ACCESS  0x00
-/*lenovo-sw caoyi1 modify 20150325 end*/
+#define LSM6DS3_FUNC_CFG_ACCESS  0x01
 #define LSM6DS3_SENSOR_SYNC_TIME_FRAME 0X04
 
 /*FIFO control register*/

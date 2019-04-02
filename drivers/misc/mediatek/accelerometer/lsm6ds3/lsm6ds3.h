@@ -25,8 +25,7 @@
 
 
 /* LSM6DS3 Register Map  (Please refer to LSM6DS3 Specifications) */
-#define LSM6DS3_FUNC_CFG_ACCESS  0x00
-#define LSM6DS3_RAM_ACCESS  	0X01
+#define LSM6DS3_FUNC_CFG_ACCESS  0x01
 #define LSM6DS3_SENSOR_SYNC_TIME_FRAME 0X04
 
 /*FIFO control register*/
@@ -295,12 +294,7 @@ typedef enum {
 
 #define  	LSM6DS3_ACC_GYRO_SIGN_MOT_MASK  	0x01
 
-typedef enum {
-  	LSM6DS3_ACC_GYRO_RAM_PAGE_DISABLED 		 =0x00,
-  	LSM6DS3_ACC_GYRO_RAM_PAGE_ENABLED 		 =0x80,
-} LSM6DS3_ACC_GYRO_RAM_PAGE_t;
-
-#define LSM6DS3_RAM_PAGE_MASK  	0x80
+#define LSM6DS3_FUNC_CFG_REG2_MASK  	0x80
 #define LSM6DS3_CONFIG_PEDO_THS_MIN          0x0F
 
 typedef enum {
