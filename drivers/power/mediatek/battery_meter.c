@@ -3514,6 +3514,77 @@ signed int battery_meter_get_charging_current(void)
 #endif
 }
 
+signed int battery_meter_get_charger_current(void)
+{
+#ifdef DISABLE_CHARGING_CURRENT_MEASURE
+	return 0;
+	/* lenovo-sw mahj2 support meter charger current use charger ic Begin*/
+#elif defined (CHAGER_CURRENT_USE_SWITCHIC_METER)
+	signed int adc_current = 0;
+	signed int charger_current = 0;
+
+	adc_current = get_charger_current_adc(CHARGER_CURRENT_ADC);
+	charger_current = adc_current*CHARGER_IC_KLIM/CHARGER_IC_RLIM;
+	printk("battery_meter_get_charging_current : charger_current=%d \n",charger_current);
+
+	return charger_current;
+	/* lenovo-sw mahj2 support meter charger current use charger ic End*/
+#elif !defined(EXTERNAL_SWCHR_SUPPORT)
+	signed int ADC_I_SENSE_tmp[20] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+	signed int ADC_I_SENSE_sum = 0;
+	signed int ADC_I_SENSE = 0;
+	int repeat = 20;
+	int i = 0;
+	int j = 0;
+	signed int temp = 0;
+	int ICharging = 0;
+	int ret = 0;
+	int val = 1;
+
+	for (i = 0; i < repeat; i++) {
+		val = 1;	/* set avg times */
+		ret = battery_meter_ctrl(BATTERY_METER_CMD_GET_ADC_V_I_SENSE, &val);
+		ADC_I_SENSE_tmp[i] = val;
+
+		ADC_I_SENSE_sum += ADC_I_SENSE_tmp[i];
+	}
+
+	/* sorting    I_SENSE */
+	for (i = 0; i < repeat; i++) {
+		for (j = i; j < repeat; j++) {
+			if (ADC_I_SENSE_tmp[j] < ADC_I_SENSE_tmp[i]) {
+				temp = ADC_I_SENSE_tmp[j];
+				ADC_I_SENSE_tmp[j] = ADC_I_SENSE_tmp[i];
+				ADC_I_SENSE_tmp[i] = temp;
+			}
+		}
+	}
+
+	bm_print(BM_LOG_FULL, "[g_Get_I_Charging:I_SENSE]\r\n");
+	for (i = 0; i < repeat; i++)
+		bm_print(BM_LOG_FULL, "%d,", ADC_I_SENSE_tmp[i]);
+
+	bm_print(BM_LOG_FULL, "\r\n");
+
+	ADC_I_SENSE_sum -= ADC_I_SENSE_tmp[0];
+	ADC_I_SENSE_sum -= ADC_I_SENSE_tmp[1];
+	ADC_I_SENSE_sum -= ADC_I_SENSE_tmp[18];
+	ADC_I_SENSE_sum -= ADC_I_SENSE_tmp[19];
+	ADC_I_SENSE = ADC_I_SENSE_sum / (repeat - 4);
+
+	bm_print(BM_LOG_FULL, "[g_Get_I_Charging] ADC_I_SENSE(Before)=%d\r\n", ADC_I_SENSE);
+
+
+	bm_print(BM_LOG_FULL, "[g_Get_I_Charging] ADC_I_SENSE(After)=%d\r\n", ADC_I_SENSE);
+
+	ICharging = (ADC_I_SENSE + g_I_SENSE_offset) * 1000 / batt_meter_cust_data.cust_r_sense;
+
+	return ICharging;
+#else
+	return 0;
+#endif
+}
+
 signed int battery_meter_get_battery_current(void)
 {
 	int ret = 0;
@@ -3915,6 +3986,11 @@ signed int battery_meter_get_VSense(void)
 	ret = battery_meter_ctrl(BATTERY_METER_CMD_GET_ADC_V_I_SENSE, &val);
 	return val;
 #endif
+}
+
+signed int battery_meter_get_QMAX25(void)
+{
+	return batt_meter_cust_data.q_max_pos_25;
 }
 
 /* ============================================================ // */

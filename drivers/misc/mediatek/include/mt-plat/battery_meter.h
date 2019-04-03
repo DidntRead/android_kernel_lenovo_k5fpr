@@ -344,6 +344,7 @@ extern int IMM_GetOneChannelValue_Cali(int Channel, int *voltage);
 extern signed int battery_meter_get_battery_voltage(kal_bool update);
 extern signed int battery_meter_get_charging_current_imm(void);
 extern signed int battery_meter_get_charging_current(void);
+extern signed int battery_meter_get_charger_current(void);
 extern signed int battery_meter_get_battery_current(void);
 extern kal_bool battery_meter_get_battery_current_sign(void);
 extern signed int battery_meter_get_car(void);
@@ -360,6 +361,7 @@ extern signed int battery_meter_get_battery_nPercent_UI_SOC(void);	/* tracking p
 
 extern signed int battery_meter_get_tempR(signed int dwVolt);
 extern signed int battery_meter_get_tempV(void);
+extern signed int battery_meter_get_QMAX25(void);
 extern signed int battery_meter_get_VSense(void);/* isense voltage */
 extern int wakeup_fg_algo(int flow_state);
 
