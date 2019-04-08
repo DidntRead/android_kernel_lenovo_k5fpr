@@ -97,16 +97,16 @@ static LCM_UTIL_FUNCS lcm_util = {0};
 #define REGFLAG_DELAY										0xFE
 #define REGFLAG_END_OF_TABLE						0xFF
 
-extern int tps65132_write_bytes(unsigned char addr, unsigned char value);
+extern int lm36923_write_bytes(unsigned char addr, unsigned char value);
 
 /*****************************************************************************
  * Define
  *****************************************************************************/
 
 #define I2C_I2C_LCD_BIAS_CHANNEL 2
-#define TPS_I2C_BUSNUM  I2C_I2C_LCD_BIAS_CHANNEL/*for I2C channel 0 */
-#define I2C_ID_NAME "tps65132"
-#define TPS_ADDR 0x36
+#define LM_I2C_BUSNUM  I2C_I2C_LCD_BIAS_CHANNEL/*for I2C channel 0 */
+#define I2C_ID_NAME "lm36923"
+#define LM_ADDR 0x36
 
 #if 0
 #include <linux/kernel.h>
@@ -131,41 +131,41 @@ extern int tps65132_write_bytes(unsigned char addr, unsigned char value);
 /*****************************************************************************
  * GLobal Variable
  *****************************************************************************/
-static struct i2c_board_info __initdata tps65132_board_info = {I2C_BOARD_INFO(I2C_ID_NAME, TPS_ADDR)};
-static struct i2c_client *tps65132_i2c_client = NULL;
+static struct i2c_board_info __initdata lm36923_board_info = {I2C_BOARD_INFO(I2C_ID_NAME, LM_ADDR)};
+static struct i2c_client *lm36923_i2c_client = NULL;
 
 
 /*****************************************************************************
  * Function Prototype
  *****************************************************************************/
-static int tps65132_probe(struct i2c_client *client, const struct i2c_device_id *id);
-static int tps65132_remove(struct i2c_client *client);
+static int lm36923_probe(struct i2c_client *client, const struct i2c_device_id *id);
+static int lm36923_remove(struct i2c_client *client);
 /*****************************************************************************
  * Data Structure
  *****************************************************************************/
 
-struct tps65132_dev	{
+struct lm36923_dev	{
 	struct i2c_client	*client;
 
 };
 
-static const struct i2c_device_id tps65132_id[] = {
+static const struct i2c_device_id lm36923_id[] = {
 	{ I2C_ID_NAME, 0 },
 	{ }
 };
-MODULE_DEVICE_TABLE(i2c, tps65132_id);
+MODULE_DEVICE_TABLE(i2c, lm36923_id);
 static const struct of_device_id lcm_of_match[] = {
 	{.compatible = "mediatek,i2c_lcd_bias"},
 	{},
 };
 
-static struct i2c_driver tps65132_iic_driver = {
-	.id_table	= tps65132_id,
-	.probe		= tps65132_probe,
-	.remove		= tps65132_remove,
+static struct i2c_driver lm36923_iic_driver = {
+	.id_table	= lm36923_id,
+	.probe		= lm36923_probe,
+	.remove		= lm36923_remove,
 	.driver		= {
 		.owner	= THIS_MODULE,
-		.name	= "tps65132",
+		.name	= "lm36923",
 		.of_match_table = lcm_of_match,
 	},
 	.address_list = (const unsigned short*) forces,
@@ -174,35 +174,35 @@ static struct i2c_driver tps65132_iic_driver = {
 /*****************************************************************************
  * Function
  *****************************************************************************/
-static int tps65132_probe(struct i2c_client *client, const struct i2c_device_id *id)
+static int lm36923_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
-	printk("tps65132_iic_probe\n");
-	printk("TPS: info==>name=%s addr=0x%x\n", client->name, client->addr);
-	tps65132_i2c_client  = client;
+	printk("lm36923_iic_probe\n");
+	printk("LM: info==>name=%s addr=0x%x\n", client->name, client->addr);
+	lm36923_i2c_client  = client;
 	return 0;
 }
 
 
-static int tps65132_remove(struct i2c_client *client)
+static int lm36923_remove(struct i2c_client *client)
 {
-	printk("tps65132_remove\n");
-	tps65132_i2c_client = NULL;
+	printk("lm36923_remove\n");
+	lm36923_i2c_client = NULL;
 	i2c_unregister_device(client);
 	return 0;
 }
 
 
-static int tps65132_write_bytes(unsigned char addr, unsigned char value)
+static int lm36923_write_bytes(unsigned char addr, unsigned char value)
 {
 	int ret = 0;
-	struct i2c_client *client = tps65132_i2c_client;
+	struct i2c_client *client = lm36923_i2c_client;
 	char write_data[2] = {0};
 	write_data[0] = addr;
 	write_data[1] = value;
 	client->flags = 0;
 	ret = i2c_master_send(client, write_data, 2);
 	if (ret < 0)
-		printk("tps65132 write data fail !!\n");
+		printk("lm36923 write data fail !!\n");
 	return ret ;
 }
 
@@ -210,43 +210,43 @@ static int tps65132_write_bytes(unsigned char addr, unsigned char value)
  * module load/unload record keeping
  */
 
-static int __init tps65132_iic_init(void)
+static int __init lm36923_iic_init(void)
 {
 
-	printk("tps65132_iic_init\n");
-	i2c_register_board_info(1, &tps65132_board_info, 1);
-	printk("tps65132_iic_init2\n");
-	if(i2c_add_driver(&tps65132_iic_driver)!=0)
+	printk("lm36923_iic_init\n");
+	i2c_register_board_info(1, &lm36923_board_info, 1);
+	printk("lm36923_iic_init2\n");
+	if(i2c_add_driver(&lm36923_iic_driver)!=0)
    	{
-        printk("tps65132 unable to add i2c driver.\n");
+        printk("lm36923 unable to add i2c driver.\n");
       	return -1;
     }
-	printk("tps65132_iic_init success\n");
+	printk("lm36923_iic_init success\n");
 	return 0;
 }
 
-static void __exit tps65132_iic_exit(void)
+static void __exit lm36923_iic_exit(void)
 {
-	printk("tps65132_iic_exit\n");
-	i2c_del_driver(&tps65132_iic_driver);
+	printk("lm36923_iic_exit\n");
+	i2c_del_driver(&lm36923_iic_driver);
 }
 
 
-module_init(tps65132_iic_init);
-module_exit(tps65132_iic_exit);
+module_init(lm36923_iic_init);
+module_exit(lm36923_iic_exit);
 
 MODULE_AUTHOR("Xiaokuan Shi");
-MODULE_DESCRIPTION("MTK TPS65132 I2C Driver");
+MODULE_DESCRIPTION("MTK LM65132 I2C Driver");
 MODULE_LICENSE("GPL");
 
 #endif
 
 #ifdef BUILD_LK
 
-#define TPS65132_SLAVE_ADDR_WRITE  0x6C
-static struct mt_i2c_t TPS65132_i2c;
+#define LM65132_SLAVE_ADDR_WRITE  0x6C
+static struct mt_i2c_t LM65132_i2c;
 
-static int TPS65132_write_byte(kal_uint8 addr, kal_uint8 value)
+static int LM65132_write_byte(kal_uint8 addr, kal_uint8 value)
 {
 	kal_uint32 ret_code = I2C_OK;
 	kal_uint8 write_data[2];
@@ -255,14 +255,14 @@ static int TPS65132_write_byte(kal_uint8 addr, kal_uint8 value)
 	write_data[0] = addr;
 	write_data[1] = value;
 
-	TPS65132_i2c.id = I2C_I2C_LCD_BIAS_CHANNEL;/*I2C2; */
+	LM65132_i2c.id = I2C_I2C_LCD_BIAS_CHANNEL;/*I2C2; */
 	/* Since i2c will left shift 1 bit, we need to set FAN5405 I2C address to >>1 */
-	TPS65132_i2c.addr = (TPS65132_SLAVE_ADDR_WRITE >> 1);
-	TPS65132_i2c.mode = ST_MODE;
-	TPS65132_i2c.speed = 100;
+	LM65132_i2c.addr = (LM65132_SLAVE_ADDR_WRITE >> 1);
+	LM65132_i2c.mode = ST_MODE;
+	LM65132_i2c.speed = 100;
 	len = 2;
 
-	ret_code = i2c_write(&TPS65132_i2c, write_data, len);
+	ret_code = i2c_write(&LM65132_i2c, write_data, len);
 	/*
 	 *printf("%s: i2c_write: ret_code: %d\n", __func__, ret_code);
 	 */
@@ -950,49 +950,49 @@ static void lcm_init(void)
 	dsi_lcm_set_gpio_out(GPIO_LCM_LED_EN, GPIO_OUT_ONE);
 	MDELAY(1);
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM65132_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 	cmd = 0x19;
 	data = 0xCC; /*PWM MSBs */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM65132_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 	cmd = 0x11;
 	data = 0x41; /*wuwl10 modify for PWM mode 3,ramp disable when resume */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM65132_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 /*
@@ -1001,17 +1001,17 @@ static void lcm_init(void)
 	cmd = 0x12;
 	data = 0x61; /*PWM mode control hystersis 0 */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM65132_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 /*
  *lenovo-sw wuwl10 20150706 add for backlight take no effect when level less than 5 end
@@ -1020,17 +1020,17 @@ static void lcm_init(void)
 	cmd = 0x13;
 	data = 0x6B; /*wuwl10 20150706 add for  PWM switch freq 1M,OVP 25v */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM65132_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 #endif

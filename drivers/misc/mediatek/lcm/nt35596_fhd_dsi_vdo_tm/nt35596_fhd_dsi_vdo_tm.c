@@ -102,9 +102,9 @@ static LCM_UTIL_FUNCS lcm_util = {0};
  *****************************************************************************/
 
 #define I2C_I2C_LCD_BIAS_CHANNEL 2
-#define TPS_I2C_BUSNUM  I2C_I2C_LCD_BIAS_CHANNEL/*for I2C channel 0 */
-#define I2C_ID_NAME "tps65132"
-#define TPS_ADDR 0x36
+#define LM_I2C_BUSNUM  I2C_I2C_LCD_BIAS_CHANNEL/*for I2C channel 0 */
+#define I2C_ID_NAME "lm36923"
+#define LM_ADDR 0x36
 
 #if 1
 #ifndef BUILD_LK
@@ -130,45 +130,45 @@ static LCM_UTIL_FUNCS lcm_util = {0};
 /*****************************************************************************
  * GLobal Variable
  *****************************************************************************/
-static struct i2c_board_info __initdata tps65132_board_info = {I2C_BOARD_INFO(I2C_ID_NAME, TPS_ADDR)};
-static struct i2c_client *tps65132_i2c_client = NULL;
-static unsigned short force[] = {0,TPS_ADDR,I2C_CLIENT_END,I2C_CLIENT_END};
+static struct i2c_board_info __initdata lm36923_board_info = {I2C_BOARD_INFO(I2C_ID_NAME, LM_ADDR)};
+static struct i2c_client *lm36923_i2c_client = NULL;
+static unsigned short force[] = {0,LM_ADDR,I2C_CLIENT_END,I2C_CLIENT_END};
 static const unsigned short * const forces[] = { force, NULL };
 /*
  *lenovo-sw wuwl10 add  20150727 for backlihgt ic dimming setp
  */
-static int tps65132_dimming_step_old = -1;
+static int lm36923_dimming_step_old = -1;
 
 /*****************************************************************************
  * Function Prototype
  *****************************************************************************/
-static int tps65132_probe(struct i2c_client *client, const struct i2c_device_id *id);
-static int tps65132_remove(struct i2c_client *client);
+static int lm36923_probe(struct i2c_client *client, const struct i2c_device_id *id);
+static int lm36923_remove(struct i2c_client *client);
 /*****************************************************************************
  * Data Structure
  *****************************************************************************/
 
-struct tps65132_dev	{
+struct lm36923_dev	{
 	struct i2c_client	*client;
 
 };
 
-static const struct i2c_device_id tps65132_id[] = {
+static const struct i2c_device_id lm36923_id[] = {
 	{ I2C_ID_NAME, 0 },
 	{ }
 };
 static const struct of_device_id lcm_of_match[] = {
-	{.compatible = "mediatek,tps65132"},
+	{.compatible = "mediatek,lm36923"},
 	{},
 };
 
-static struct i2c_driver tps65132_iic_driver = {
-	.id_table	= tps65132_id,
-	.probe		= tps65132_probe,
-	.remove		= tps65132_remove,
+static struct i2c_driver lm36923_iic_driver = {
+	.id_table	= lm36923_id,
+	.probe		= lm36923_probe,
+	.remove		= lm36923_remove,
 	.driver		= {
 		.owner	= THIS_MODULE,
-		.name	= "tps65132",
+		.name	= "lm36923",
 		.of_match_table = lcm_of_match,
 	},
 	.address_list = (const unsigned short*) forces,
@@ -180,44 +180,44 @@ static struct i2c_driver tps65132_iic_driver = {
 
 
 
-static int tps65132_remove(struct i2c_client *client)
+static int lm36923_remove(struct i2c_client *client)
 {
-	printk("tps65132_remove\n");
-	tps65132_i2c_client = NULL;
+	printk("lm36923_remove\n");
+	lm36923_i2c_client = NULL;
 	i2c_unregister_device(client);
 	return 0;
 }
 
 
-int tps65132_write_bytes(unsigned char addr, unsigned char value)
+int lm36923_write_bytes(unsigned char addr, unsigned char value)
 {
 	int ret = 0;
-	struct i2c_client *client = tps65132_i2c_client;
+	struct i2c_client *client = lm36923_i2c_client;
 	char write_data[2] = {0};
 	write_data[0] = addr;
 	write_data[1] = value;
 	client->flags = 0;
 	ret = i2c_master_send(client, write_data, 2);
 	if (ret < 0)
-		printk("tps65132 write data fail !!\n");
+		printk("lm36923 write data fail !!\n");
 	return ret ;
 }
-EXPORT_SYMBOL_GPL(tps65132_write_bytes);
+EXPORT_SYMBOL_GPL(lm36923_write_bytes);
 /*
  *lenovo-sw wuwl10 add  20150727 for backlihgt ic dimming setp begin
  */
-static int tps65132_read_bytes(unsigned char reg, unsigned char *read_buf)
+static int lm36923_read_bytes(unsigned char reg, unsigned char *read_buf)
 {
 	int ret = 0;
-	struct i2c_client *client = tps65132_i2c_client;
+	struct i2c_client *client = lm36923_i2c_client;
 
 	ret = i2c_master_send(client, &reg, 1);
 
 	ret = i2c_master_recv(client, read_buf, 1);
 	if (ret < 0)
-		printk("[wuwl10] tps65132_read_bytes fail !!\n");
+		printk("[wuwl10] lm36923_read_bytes fail !!\n");
 	else
-		printk("[wuwl10] tps65132_read_bytes sucess !!\n");
+		printk("[wuwl10] lm36923_read_bytes sucess !!\n");
 
 	return ret ;
 }
@@ -228,7 +228,7 @@ static ssize_t get_backlihgtic_dimming_setp(struct device *dev,
 	ssize_t ret = 0;
 	unsigned char read_value;
 
-	tps65132_read_bytes(0x11, &read_value);
+	lm36923_read_bytes(0x11, &read_value);
 	if ((read_value & 0xf1) == 0x41)
 		read_value = 8;
 	else {
@@ -254,7 +254,7 @@ static ssize_t set_backlihgtic_dimming_setp(struct device *pdev, struct device_a
 	if (dimming_level > 8)
 		dimming_level = 8;
 
-	if (tps65132_dimming_step_old == dimming_level)
+	if (lm36923_dimming_step_old == dimming_level)
 		return size;
 
 	if (dimming_level == 8)
@@ -265,17 +265,17 @@ static ssize_t set_backlihgtic_dimming_setp(struct device *pdev, struct device_a
 		reg_value |= 0x51;
 	}
 	while (retry--) {
-		tps65132_write_bytes(0x11, reg_value);
-		tps65132_read_bytes(0x11, &read_value);
+		lm36923_write_bytes(0x11, reg_value);
+		lm36923_read_bytes(0x11, &read_value);
 		if (read_value == reg_value)
 			break;
 		printk("[wuwl10] set_backlihgtic_dimming_setp fail,retry:%d,write:0x%x,read:0x%x \n", retry, reg_value, read_value);
 	}
 	if (retry == 0)
 		return -1;
-	printk("[wuwl10] set_backlihgtic_dimming_setp sucess,old:%d,dimming_level:%d\n", tps65132_dimming_step_old, dimming_level);
+	printk("[wuwl10] set_backlihgtic_dimming_setp sucess,old:%d,dimming_level:%d\n", lm36923_dimming_step_old, dimming_level);
 
-	tps65132_dimming_step_old = dimming_level;
+	lm36923_dimming_step_old = dimming_level;
 	return size;
 }
 
@@ -283,13 +283,13 @@ static DEVICE_ATTR(dimming_step_time, S_IRUGO | S_IWUSR, get_backlihgtic_dimming
 /*
  * module load/unload record keeping
  */
-static int tps65132_probe(struct i2c_client *client, const struct i2c_device_id *id)
+static int lm36923_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int ret = 0;
-	printk("tps65132_iic_probe\n");
-	printk("TPS: info==>name=%s addr=0x%x\n", client->name, client->addr);
+	printk("lm36923_iic_probe\n");
+	printk("LM: info==>name=%s addr=0x%x\n", client->name, client->addr);
 	client->addr = 0x36;
-	tps65132_i2c_client  = client;
+	lm36923_i2c_client  = client;
 	ret = device_create_file(&client->dev, &dev_attr_dimming_step_time);
 	if (ret < 0)
 		pr_err("failed to create dimming_step_time file\n");
@@ -298,41 +298,41 @@ static int tps65132_probe(struct i2c_client *client, const struct i2c_device_id 
 /*
  *lenovo-sw wuwl10 add  20150727 for backlihgt ic dimming setp end
  */
-static int __init tps65132_iic_init(void)
+static int __init lm36923_iic_init(void)
 {
 
-	printk("tps65132_iic_init\n");
-	i2c_register_board_info(2, &tps65132_board_info, 1);
-	printk("tps65132_iic_init2\n");
-	if(i2c_add_driver(&tps65132_iic_driver)!=0)
+	printk("lm36923_iic_init\n");
+	i2c_register_board_info(2, &lm36923_board_info, 1);
+	printk("lm36923_iic_init2\n");
+	if(i2c_add_driver(&lm36923_iic_driver)!=0)
    	{
-        printk("tps65132 unable to add i2c driver.\n");
+        printk("lm36923 unable to add i2c driver.\n");
       	return -1;
     }
-	printk("tps65132_iic_init success\n");
+	printk("lm36923_iic_init success\n");
 	return 0;
 }
 
-static void __exit tps65132_iic_exit(void)
+static void __exit lm36923_iic_exit(void)
 {
-	printk("tps65132_iic_exit\n");
-	i2c_del_driver(&tps65132_iic_driver);
+	printk("lm36923_iic_exit\n");
+	i2c_del_driver(&lm36923_iic_driver);
 }
 
 
-module_init(tps65132_iic_init);
-module_exit(tps65132_iic_exit);
+module_init(lm36923_iic_init);
+module_exit(lm36923_iic_exit);
 
 MODULE_AUTHOR("Xiaokuan Shi");
-MODULE_DESCRIPTION("MTK TPS65132 I2C Driver");
+MODULE_DESCRIPTION("MTK LM36923 I2C Driver");
 MODULE_LICENSE("GPL");
 
 #else
 
-#define TPS65132_SLAVE_ADDR_WRITE  0x6C
-static struct mt_i2c_t TPS65132_i2c;
+#define LM36923_SLAVE_ADDR_WRITE  0x6C
+static struct mt_i2c_t lm36923_i2c;
 
-static int TPS65132_write_byte(kal_uint8 addr, kal_uint8 value)
+static int LM36923_write_byte(kal_uint8 addr, kal_uint8 value)
 {
 	kal_uint32 ret_code = I2C_OK;
 	kal_uint8 write_data[2];
@@ -341,14 +341,14 @@ static int TPS65132_write_byte(kal_uint8 addr, kal_uint8 value)
 	write_data[0] = addr;
 	write_data[1] = value;
 
-	TPS65132_i2c.id = I2C_I2C_LCD_BIAS_CHANNEL;/*I2C2; */
+	LM36923_i2c.id = I2C_I2C_LCD_BIAS_CHANNEL;/*I2C2; */
 	/* Since i2c will left shift 1 bit, we need to set FAN5405 I2C address to >>1 */
-	TPS65132_i2c.addr = (TPS65132_SLAVE_ADDR_WRITE >> 1);
-	TPS65132_i2c.mode = ST_MODE;
-	TPS65132_i2c.speed = 100;
+	LM36923_i2c.addr = (LM36923_SLAVE_ADDR_WRITE >> 1);
+	LM36923_i2c.mode = ST_MODE;
+	LM36923_i2c.speed = 100;
 	len = 2;
 
-	ret_code = i2c_write(&TPS65132_i2c, write_data, len);
+	ret_code = i2c_write(&LM36923_i2c, write_data, len);
 	/*
 	 *printf("%s: i2c_write: ret_code: %d\n", __func__, ret_code);
 	 */
@@ -599,49 +599,49 @@ static void lcm_init(void)
 	dsi_lcm_set_gpio_out(GPIO_LCM_LED_EN, GPIO_OUT_ONE);
 	MDELAY(1);
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM36923_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 	cmd = 0x19;
 	data = 0xCC; /*PWM MSBs */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM36923_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 	cmd = 0x11;
 	data = 0x41; /*wuwl10 modify for PWM mode 3,ramp disable when resume */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM36923_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 /*
@@ -650,17 +650,17 @@ static void lcm_init(void)
 	cmd = 0x12;
 	data = 0x61; /*PWM mode control pwm hystersis 0 */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM36923_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 /*
  *lenovo-sw wuwl10 20150706 add for backlight take no effect when level less than 5 end
@@ -669,17 +669,17 @@ static void lcm_init(void)
 	cmd = 0x13;
 	data = 0x6B; /*wuwl10 20150706 add for  PWM switch freq 1M,OVP 25v */
 #ifdef BUILD_LK
-	ret = TPS65132_write_byte(cmd, data);
+	ret = LM36923_write_byte(cmd, data);
 	if (ret)
-		printf("[LK]tps6132----cmd=%0x--i2c write error----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write error----\n", cmd);
 	else
-		printf("[LK]tps6132----cmd=%0x--i2c write success----\n", cmd);
+		printf("[LK]lm36923----cmd=%0x--i2c write success----\n", cmd);
 #else
-	ret = tps65132_write_bytes(cmd, data);
+	ret = lm36923_write_bytes(cmd, data);
 	if (ret < 0)
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write error-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write error-----\n", cmd);
 	else
-		printk("[KERNEL]tps6132---cmd=%0x-- i2c write success-----\n", cmd);
+		printk("[KERNEL]lm36923---cmd=%0x-- i2c write success-----\n", cmd);
 #endif
 
 #endif
