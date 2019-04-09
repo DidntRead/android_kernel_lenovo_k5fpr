@@ -1086,6 +1086,26 @@ static const struct wiphy_vendor_command mtk_wlan_vendor_ops[] = {
 		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
 		.doit = mtk_cfg80211_vendor_set_hotlist
 	},
+	/* Get Supported Feature Set */
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = WIFI_SUBCMD_GET_FEATURE_SET
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+				WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = mtk_cfg80211_vendor_get_supported_feature_set
+	},
+	/* Get Driver Version or Firmware Version */
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = LOGGER_GET_VER
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+				WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = mtk_cfg80211_vendor_get_version
+	},
 	/*Link Layer Statistics */
 	/*{
 	   {

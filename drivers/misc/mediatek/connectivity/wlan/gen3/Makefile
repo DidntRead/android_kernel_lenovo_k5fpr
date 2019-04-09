@@ -6,6 +6,9 @@ ccflags-y += $(WLAN_CHIP_LIST)
 
 WLAN_CHIP_ID=MT6630
 
+DRIVER_BUILD_DATE=$(shell date +%Y%m%d%H%M%S)
+ccflags-y += -DDRIVER_BUILD_DATE='"$(DRIVER_BUILD_DATE)"'
+
 ccflags-y += -DCFG_SUPPORT_DEBUG_FS=0
 ccflags-y += -DWLAN_INCLUDE_PROC
 ccflags-y += -DCFG_SUPPORT_AGPS_ASSIST=1

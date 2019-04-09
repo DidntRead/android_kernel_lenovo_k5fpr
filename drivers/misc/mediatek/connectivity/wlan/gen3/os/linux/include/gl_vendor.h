@@ -103,6 +103,11 @@ typedef enum {
 	LSTATS_SUBCMD_GET_INFO = ANDROID_NL80211_SUBCMD_LSTATS_RANGE_START,
 } LSTATS_SUB_COMMAND;
 
+enum DEBUG_SUB_COMMAND {
+	LOGGER_START_LOGGING = ANDROID_NL80211_SUBCMD_DEBUG_RANGE_START,
+	LOGGER_GET_VER
+};
+
 typedef enum {
 	GSCAN_EVENT_SIGNIFICANT_CHANGE_RESULTS,
 	GSCAN_EVENT_HOTLIST_RESULTS_FOUND,
@@ -127,6 +132,11 @@ typedef enum {
 	WIFI_ATTRIBUTE_COUNTRY_CODE
 
 } WIFI_ATTRIBUTE;
+
+enum LOGGER_ATTRIBUTE {
+	LOGGER_ATTRIBUTE_DRIVER_VER,
+	LOGGER_ATTRIBUTE_FW_VER
+};
 
 typedef enum {
 	GSCAN_ATTRIBUTE_CAPABILITIES = 1,
@@ -620,5 +630,12 @@ int mtk_cfg80211_vendor_event_hotlist_ap_found(struct wiphy *wiphy, struct wirel
 
 int mtk_cfg80211_vendor_event_hotlist_ap_lost(struct wiphy *wiphy, struct wireless_dev *wdev,
 					 P_PARAM_WIFI_GSCAN_RESULT pdata, UINT_32 data_len);
+
+int mtk_cfg80211_vendor_get_supported_feature_set(
+	struct wiphy *wiphy, struct wireless_dev *wdev,
+	const void *data, int data_len);
+
+int mtk_cfg80211_vendor_get_version(struct wiphy *wiphy, struct wireless_dev *wdev,
+					const void *data, int data_len);
 
 #endif /* _GL_VENDOR_H */
