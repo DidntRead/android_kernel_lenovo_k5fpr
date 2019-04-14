@@ -1051,7 +1051,7 @@ memory@00000000 {
 /* LCM GPIO Kernal Standardization end */
 &i2c2 {
 	tps65132@36 {
-		compatible = "mediatek,lm36923";
+		compatible = "mediatek,tps65132";
 		reg = <0x36>;
 		status = "okay";
 	};

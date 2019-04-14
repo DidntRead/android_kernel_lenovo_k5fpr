@@ -158,7 +158,7 @@ static const struct i2c_device_id lm36923_id[] = {
 	{ }
 };
 static const struct of_device_id lcm_of_match[] = {
-	{.compatible = "mediatek,lm36923"},
+	{.compatible = "mediatek,tps65132"},
 	{},
 };
 

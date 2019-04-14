@@ -6,6 +6,10 @@ ccflags-y += \
 	-I$(src)/../include \
 	-I$(src)/../../common_detect
 
+ifeq ($(CONFIG_MTK_AOSP_TETHERING), y)
+    ccflags-y += -DMTK_AOSP_TETHERING
+endif
+
 obj-y	+= wmt_dev.o
 obj-y	+= wmt_idc.o
 obj-y	+= osal.o

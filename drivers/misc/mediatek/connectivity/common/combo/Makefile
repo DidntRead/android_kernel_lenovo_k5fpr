@@ -16,6 +16,9 @@ ccflags-y += \
 COMMON_SRC_PATH := $(src)
 COMMON_OBJ_PATH := $(src)
 
+ifeq ($(CONFIG_MTK_AOSP_TETHERING), y)
+    ccflags-y += -DMTK_AOSP_TETHERING
+endif
 
 ifeq ($(CONFIG_MTK_COMBO),m)
 

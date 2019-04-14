@@ -289,3 +289,8 @@ config MTK_GPS_REGISTER_SETTING
 	depends on MTK_COMBO_GPS
 	help
 	   GPS register settings.
+
+config MTK_AOSP_TETHERING
+	bool "Enables AOSP wlan0 for wifi tethering"
+	depends on MTK_COMBO_WIFI
+	default n

@@ -1,6 +1,10 @@
 subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLATFORM)/include
 subdir-ccflags-y += -Werror -I$(srctree)/drivers/misc/mediatek/include/mt-plat
 
+ifeq ($(CONFIG_MTK_AOSP_TETHERING), y)
+    ccflags-y += -DMTK_AOSP_TETHERING
+endif
+
 ifneq ($(filter "MT6620E3",$(CONFIG_MTK_COMBO_CHIP)),)
 	obj-y   +=  combo/
 endif
